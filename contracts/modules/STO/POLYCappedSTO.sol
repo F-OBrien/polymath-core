@@ -4,6 +4,7 @@ import "./ISTO.sol";
 import "../../interfaces/ISecurityToken.sol";
 import "openzeppelin-solidity/contracts/ReentrancyGuard.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "./CappedSTOStorage.sol";
 
 /**
  * @title STO module for standard capped crowdsale
