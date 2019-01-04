@@ -8,7 +8,7 @@ import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 /**
  * @title STO module for standard capped crowdsale
  */
-contract CappedSTO is CappedSTOStorage, ISTO, ReentrancyGuard {
+contract POLYCappedSTO is CappedSTOStorage, ISTO, ReentrancyGuard {
     using SafeMath for uint256;
 
     ////////////
@@ -274,7 +274,12 @@ contract CappedSTO is CappedSTOStorage, ISTO, ReentrancyGuard {
     function changeAccredited(address[] _investors, bool[] _accredited) public onlyOwner {
         require(_investors.length == _accredited.length, "Array length mismatch");
         for (uint256 i = 0; i < _investors.length; i++) {
-            accredited[_investors[i]] = _accredited[i];
+            if (_accredited[i]) {
+                investors[_investors[i]].accredited = uint8(1);
+            } else {
+                investors[_investors[i]].accredited = uint8(0);
+            }
+            _addToInvestorsList(_investors[i]);
             emit SetAccredited(_investors[i], _accredited[i]);
         }
     }
@@ -295,6 +300,13 @@ contract CappedSTO is CappedSTOStorage, ISTO, ReentrancyGuard {
         }
     }
 
+    function _addToInvestorsList(address _investor) internal {
+        if (investors[_investor].seen == uint8(0)) {
+            investors[_investor].seen = uint8(1);
+            investorsList.push(_investor);
+        }
+    }
+
     /**
      * @notice Function to set allowBeneficialInvestments (allow beneficiary to be different to funder)
      * @param _allowBeneficialInvestments Boolean to allow or disallow beneficial investments
@@ -310,7 +322,7 @@ contract CappedSTO is CappedSTOStorage, ISTO, ReentrancyGuard {
     //////////////////////////
 	
     /**
-    * @notice fallback function - assumes POLY being invested
+    * @notice fallback function - assumes 0 POLY being invested
     */
     function () external {
         buyWithPOLYRateLimited(msg.sender, 0, 0);
@@ -397,11 +409,11 @@ contract CappedSTO is CappedSTOStorage, ISTO, ReentrancyGuard {
         // Accredited investors are not limited
 		_allowedInvestment = _investmentValue;
         // Check for non-accredited investment cap
-        if ((nonAccreditedLimitEnabled) && (!accredited[_beneficiary])) {
-            uint256 investorLimit = (nonAccreditedLimitOverride[_beneficiary] == 0) ? nonAccreditedLimit : nonAccreditedLimitOverride[_beneficiary];
+        if ((nonAccreditedLimitEnabled) && (investors[_beneficiary].accredited == uint8(0))) {
+            uint256 investorLimit = (investors[_beneficiary].nonAccreditedLimitOverride == 0) ? nonAccreditedLimit : investors[_beneficiary].nonAccreditedLimitOverride;
             require(investorInvested[_beneficiary] < investorLimit, "Over Non-accredited investor limit");
             if (_investmentValue.add(investorInvested[_beneficiary]) > investorLimit)
-                _allowedInvestment = investorLimit.sub(investorInvested[_beneficiary]); 
+                _allowedInvestment = investorLimit.sub(investorInvested[_beneficiary]);
         }
     }
 		
@@ -513,6 +525,23 @@ contract CappedSTO is CappedSTOStorage, ISTO, ReentrancyGuard {
         return allPermissions;
     }
 
+	    /**
+     * @notice Returns investor accredited & non-accredited override informatiomn
+     * @return address[] list of all configured investors
+     * @return bool[] whether investor is accredited
+     * @return uint256[] any overrides for non-accredited limits for the investor
+     */
+    function getAccreditedData() external view returns (address[], bool[], uint256[]) {
+        bool[] memory accrediteds = new bool[](investorsList.length);
+        uint256[] memory nonAccreditedLimitOverrides = new uint256[](investorsList.length);
+        uint256 i;
+        for (i = 0; i < investorsList.length; i++) {
+            accrediteds[i] = (investors[investorsList[i]].accredited == uint8(0)? false: true);
+            nonAccreditedLimitOverrides[i] = investors[investorsList[i]].nonAccreditedLimitOverride;
+        }
+        return (investorsList, accrediteds, nonAccreditedLimitOverrides);
+    }
+	
     /**
      * @notice Return the STO details
      * @return Unixtimestamp at which offering gets start.

@@ -35,9 +35,22 @@ contract CappedSTOStorage {
     // Amount in the selected fund raise type invested by each investor
     mapping (address => uint256) public investorInvested;
 
-    // List of accredited investors
-    mapping (address => bool) public accredited;
+    struct Investor {
+        // Whether investor is accredited (0 = non-accredited, 1 = accredited)
+        uint8 accredited;
+        // Whether we have seen the investor before (already added to investors list)
+        uint8 seen;
+        // Overrides for default limit for non-accredited investors (0 = no override)
+        uint256 nonAccreditedLimitOverride;
+    }
 
+    // Accredited & non-accredited investor data
+    mapping (address => Investor) public investors;
+
+    // List of all addresses that have been added as accredited or non-accredited without
+    // the default limit
+    address[] public investorsList;
+	
     // List of active stable coin addresses
     mapping (address => bool) public usdTokenEnabled;
 
