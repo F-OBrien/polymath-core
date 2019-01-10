@@ -109,7 +109,7 @@ contract POLYCappedSTO is POLYCappedSTOStorage, ISTO, ReentrancyGuard {
         uint256 _nonAccreditedLimit,
         uint256 _maxNonAccreditedInvestors,
         address _wallet,
-        address _reserveWallet,
+        address _reserveWallet
     ) public onlyFactory {
         require(endTime == 0, "Already configured");
         fundRaiseTypes[uint8(FundRaiseType.ETH)] = false;
@@ -424,6 +424,7 @@ contract POLYCappedSTO is POLYCappedSTOStorage, ISTO, ReentrancyGuard {
             investorCount = investedList.length;
             if (investors[_beneficiary].accredited == uint8(0)) {
                 nonAccreditedCount = nonAccreditedCount + 1;
+            }
         }
         investorInvested[_beneficiary] = investorInvested[_beneficiary].add(_tokenAmount);
 
