@@ -82,6 +82,9 @@ function selectExistingSTO(stoModules, showPaused) {
     case 'CappedSTO':
       stoABI = abis.cappedSTO();
       break;
+    case 'POLYCappedSTO':
+      stoABI = abis.polyCappedSTO();
+      break;
     case 'USDTieredSTO':
       stoABI = abis.usdTieredSTO();
       break;
@@ -95,6 +98,9 @@ async function showSTO(selectedSTO, currentSTO) {
   switch (selectedSTO) {
     case 'CappedSTO':
       await cappedSTO_status(currentSTO);
+      break;
+    case 'POLYCappedSTO':
+      await polyCappedSTO_status(currentSTO);
       break;
     case 'USDTieredSTO':
       await usdTieredSTO_status(currentSTO);
@@ -110,6 +116,9 @@ async function modifySTO(selectedSTO, currentSTO) {
     *********************************
     This option is not yet available.
     *********************************`));
+      break;
+    case 'POLYCappedSTO':
+      await polyCappedSTO_configure(currentSTO);
       break;
     case 'USDTieredSTO':
       await usdTieredSTO_configure(currentSTO);
@@ -138,6 +147,10 @@ async function addSTOModule(stoConfig) {
     case 'CappedSTO':
       let cappedSTO = await cappedSTO_launch(stoConfig);
       await cappedSTO_status(cappedSTO);
+      break;
+    case 'POLYCappedSTO':
+      let polyCappedSTO = await polyCappedSTO_launch(stoConfig);
+      await polyCappedSTO_status(polyCappedSTO);
       break;
     case 'USDTieredSTO':
       let usdTieredSTO = await usdTieredSTO_launch(stoConfig);
@@ -274,6 +287,10 @@ async function cappedSTO_status(currentSTO) {
   - Investor count:    ${displayInvestorCount}
   `);
 }
+
+/////////////////////
+// POLY Capped STO //
+/////////////////////
 
 ////////////////////
 // USD Tiered STO //
