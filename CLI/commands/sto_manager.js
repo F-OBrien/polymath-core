@@ -493,9 +493,9 @@ async function polyCappedSTO_status(currentSTO) {
   - End Time:                      ${new Date(displayEndTime * 1000)}
   - Raise Type:                    ${displayRaiseType}
   - Rate:                          1 ${displayRaiseType} = ${web3.utils.fromWei(displayRate)} ${displayTokenSymbol.toUpperCase()}
-  - Minimum Investment:            ${displayMinimumInvestment} ${displayRaiseType}
+  - Minimum Investment:            ${web3.utils.fromWei(displayMinimumInvestment)} ${displayRaiseType}
   - Default Non-Accredited
-    investment Limit:              ${displayNonAccreditedLimit} ${displayRaiseType}
+    investment Limit:              ${web3.utils.fromWei(displayNonAccreditedLimit)} ${displayRaiseType}
   - Maxaimum Number of
     Non-Accredited Investors:      ${displayMaxNonAccreditedInvestors}
   - Wallet:                        ${displayWallet}
