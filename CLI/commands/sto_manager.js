@@ -151,18 +151,33 @@ async function addSTOModule(stoConfig) {
   switch (optionSelected) {
     case 'CappedSTO':
       await cappedSTODetails();
-      let cappedSTO = await cappedSTO_launch(stoConfig);
-      await cappedSTO_status(cappedSTO);
+      if (readlineSync.keyInYNStrict('\nAre you sure you launch this STO?')) {
+       let cappedSTO = await cappedSTO_launch(stoConfig);
+        await cappedSTO_status(cappedSTO);
+      }
+      else {
+        return;
+      }
       break;
     case 'POLYCappedSTO':
       await polyCappedSTODetails();
-      let polyCappedSTO = await polyCappedSTO_launch(stoConfig);
-      await polyCappedSTO_status(polyCappedSTO);
+      if (readlineSync.keyInYNStrict('\nAre you sure you launch this STO?')) {
+        let polyCappedSTO = await polyCappedSTO_launch(stoConfig);
+        await polyCappedSTO_status(polyCappedSTO);
+      }
+      else {
+        return;
+      }
       break;
     case 'USDTieredSTO':
       await usdTieredSTODetails();
-      let usdTieredSTO = await usdTieredSTO_launch(stoConfig);
-      await usdTieredSTO_status(usdTieredSTO);
+      if (readlineSync.keyInYNStrict('\nAre you sure you launch this STO?')) {
+        let usdTieredSTO = await usdTieredSTO_launch(stoConfig);
+        await usdTieredSTO_status(usdTieredSTO);
+      }
+      else {
+        return;
+      }
       break;
   }
 }
@@ -173,8 +188,8 @@ async function cappedSTODetails() {
   let cappedSTOFactory = new web3.eth.Contract(cappedSTOFactoryABI, cappedSTOFactoryAddress);
   cappedSTOFactory.setProvider(web3.currentProvider);
   let cappedSTOFee = new web3.utils.BN(await cappedSTOFactory.methods.getSetupCost().call());
-  console.log(`CappedSTO Fee: ${web3.utils.fromWei(cappedSTOFee)} POLY`)
-  console.log(`CappedSTO Description:\n${web3.utils._(await cappedSTOFactory.methods.description().call())} POLY`)
+  console.log(`CappedSTO Fee:         ${web3.utils.fromWei(cappedSTOFee)} POLY`)
+  console.log(`CappedSTO Description:\n${web3.utils._(await cappedSTOFactory.methods.description().call())}`)
 }
 
 async function polyCappedSTODetails() {
@@ -183,18 +198,18 @@ async function polyCappedSTODetails() {
   let polyCappedSTOFactory = new web3.eth.Contract(polyCappedSTOFactoryABI, polyCappedSTOFactoryAddress);
   polyCappedSTOFactory.setProvider(web3.currentProvider);
   let polyCappedSTOFee = new web3.utils.BN(await polyCappedSTOFactory.methods.getSetupCost().call());
-  console.log(`POLYCappedSTO Fee: ${web3.utils.fromWei(polyCappedSTOFee)} POLY`)
-  console.log(`POLYCappedSTO Description:\n${web3.utils._(await polyCappedSTOFactory.methods.description().call())} POLY`)
+  console.log(`POLYCappedSTO Fee:         ${web3.utils.fromWei(polyCappedSTOFee)} POLY`)
+  console.log(`POLYCappedSTO Description:\n${web3.utils._(await polyCappedSTOFactory.methods.description().call())}`)
 }
 
-async function usdTiredSTODetails() {
+async function usdTieredSTODetails() {
   let usdTieredSTOFactoryABI = abis.usdTieredSTOFactory();
-  let usdTieredSTOFactoryAddress = await contracts.getModuleFactoryAddressByName(securityToken.options.address, gbl.constants.MODULES_TYPES.STO, "usdTieredSTO");
+  let usdTieredSTOFactoryAddress = await contracts.getModuleFactoryAddressByName(securityToken.options.address, gbl.constants.MODULES_TYPES.STO, "USDTieredSTO");
   let usdTieredSTOFactory = new web3.eth.Contract(usdTieredSTOFactoryABI, usdTieredSTOFactoryAddress);
   usdTieredSTOFactory.setProvider(web3.currentProvider);
   let usdTieredSTOFee = new web3.utils.BN(await usdTieredSTOFactory.methods.getSetupCost().call());
-  console.log(`USDTiredSTO Fee: ${web3.utils.fromWei(usdTieredSTOFee)} POLY`)
-  console.log(`USDTiredSTO Description:\n${web3.utils._(await usdTiredSTOFactory.methods.description().call())} POLY`)
+  console.log(`USDTieredSTO Fee:         ${web3.utils.fromWei(usdTieredSTOFee)} POLY`)
+  console.log(`USDTieredSTO Description:\n${web3.utils._(await usdTieredSTOFactory.methods.description().call())}`)
 }
 
 ////////////////
