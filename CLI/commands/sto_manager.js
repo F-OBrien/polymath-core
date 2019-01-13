@@ -155,9 +155,6 @@ async function addSTOModule(stoConfig) {
        let cappedSTO = await cappedSTO_launch(stoConfig);
         await cappedSTO_status(cappedSTO);
       }
-      else {
-        return;
-      }
       break;
     case 'POLYCappedSTO':
       await polyCappedSTODetails();
@@ -165,18 +162,12 @@ async function addSTOModule(stoConfig) {
         let polyCappedSTO = await polyCappedSTO_launch(stoConfig);
         await polyCappedSTO_status(polyCappedSTO);
       }
-      else {
-        return;
-      }
       break;
     case 'USDTieredSTO':
       await usdTieredSTODetails();
       if (readlineSync.keyInYNStrict('\nAre you sure you launch this STO?')) {
         let usdTieredSTO = await usdTieredSTO_launch(stoConfig);
         await usdTieredSTO_status(usdTieredSTO);
-      }
-      else {
-        return;
       }
       break;
   }
