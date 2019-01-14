@@ -151,23 +151,32 @@ async function addSTOModule(stoConfig) {
   switch (optionSelected) {
     case 'CappedSTO':
       await cappedSTODetails();
-      if (readlineSync.keyInYNStrict('\nAre you sure you launch this STO?')) {
+      if (readlineSync.keyInYNStrict('\nAre you sure you want to configure and launch this STO?')) {
        let cappedSTO = await cappedSTO_launch(stoConfig);
         await cappedSTO_status(cappedSTO);
+      }
+      else{
+        await addSTOModule(stoConfig);
       }
       break;
     case 'POLYCappedSTO':
       await polyCappedSTODetails();
-      if (readlineSync.keyInYNStrict('\nAre you sure you launch this STO?')) {
+      if (readlineSync.keyInYNStrict('\nAre you sure you want to configure and launch this STO?')) {
         let polyCappedSTO = await polyCappedSTO_launch(stoConfig);
         await polyCappedSTO_status(polyCappedSTO);
+      }
+      else{
+        await addSTOModule(stoConfig);
       }
       break;
     case 'USDTieredSTO':
       await usdTieredSTODetails();
-      if (readlineSync.keyInYNStrict('\nAre you sure you launch this STO?')) {
+      if (readlineSync.keyInYNStrict('\nAre you sure you want to configure and launch this STO?')) {
         let usdTieredSTO = await usdTieredSTO_launch(stoConfig);
         await usdTieredSTO_status(usdTieredSTO);
+      }
+      else{
+        await addSTOModule(stoConfig);
       }
       break;
   }
