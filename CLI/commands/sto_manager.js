@@ -417,7 +417,7 @@ async function addressesConfigPolyCappedSTO() {
   });
   if (addresses.wallet == "") addresses.wallet = Issuer.address;
 
-  if (readlineSync.keyInYNStrict('\nDo you want unsold tokens to be minted if the cap is not met?')) {
+  if (readlineSync.keyInYNStrict('Do you want unsold tokens to be minted if the cap is not met?')) {
     addresses.reserveWallet = readlineSync.question('Enter the address that will receive unsold tokens (' + Issuer.address + '): ', {
       limit: function (input) {
         return web3.utils.isAddress(input);
