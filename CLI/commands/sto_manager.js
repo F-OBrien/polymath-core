@@ -374,7 +374,7 @@ async function polyCappedSTO_launch(stoConfig) {
   let useConfigFile = typeof stoConfig !== 'undefined';
   let funding = {};
   funding.raiseType = [gbl.constants.FUND_RAISE_TYPES.POLY];
-  let addresses = useConfigFile ? stoConfig.addresses : await addressesConfigUSDTieredSTO(funding.raiseType.includes(gbl.constants.FUND_RAISE_TYPES.STABLE));
+  let addresses = useConfigFile ? stoConfig.addresses : await addressesConfigPolyCappedSTO();
   let cap = useConfigFile ? stoConfig.cap : capConfig();
   let rate = useConfigFile ? stoConfig.rate : polyRateConfig();
   let limits = useConfigFile ? stoConfig.limits : limitsConfigPOLYCappedSTO();
@@ -403,6 +403,35 @@ async function polyCappedSTO_launch(stoConfig) {
   polyCappedSTO.setProvider(web3.currentProvider);
 
   return polyCappedSTO;
+}
+
+async function addressesConfigPolyCappedSTO() {
+  let addresses = {};
+
+  addresses.wallet = readlineSync.question('Enter the address that will receive the funds from the STO (' + Issuer.address + '): ', {
+    limit: function (input) {
+      return web3.utils.isAddress(input);
+    },
+    limitMessage: "Must be a valid address",
+    defaultInput: Issuer.address
+  });
+  if (addresses.wallet == "") addresses.wallet = Issuer.address;
+
+  if (readlineSync.keyInYNStrict('\nDo you want unsold tokens to be minted if the cap is not met?')) {
+    addresses.reserveWallet = readlineSync.question('Enter the address that will receive unsold tokens (' + Issuer.address + '): ', {
+      limit: function (input) {
+        return web3.utils.isAddress(input);
+      },
+      limitMessage: "Must be a valid address",
+      defaultInput: Issuer.address
+    });
+    if (addresses.reserveWallet == "") addresses.reserveWallet = Issuer.address;
+  }
+  else{
+    addresses.reserveWallet = ADDRESS_ZERO;
+  }
+
+  return addresses;
 }
 
 function capConfig() {
