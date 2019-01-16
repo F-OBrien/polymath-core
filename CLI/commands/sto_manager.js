@@ -183,8 +183,8 @@ async function cappedSTODetails() {
   let cappedSTOFactory = new web3.eth.Contract(cappedSTOFactoryABI, cappedSTOFactoryAddress);
   cappedSTOFactory.setProvider(web3.currentProvider);
   let cappedSTOFee = new web3.utils.BN(await cappedSTOFactory.methods.getSetupCost().call());
-  console.log(`CappedSTO Fee:         ${web3.utils.fromWei(cappedSTOFee)} POLY`)
   console.log(`CappedSTO Description:\n${web3.utils._(await cappedSTOFactory.methods.description().call())}`)
+  console.log(chalk.green(`\nCappedSTO deployment requires ${web3.utils.fromWei(cappedSTOFee)} POLY payment from '${Issuer.address}'\nCurrent balance is: ${(web3.utils.fromWei(await polyToken.methods.balanceOf(Issuer.address).call()))} POLY`));
 }
 
 async function polyCappedSTODetails() {
@@ -193,8 +193,8 @@ async function polyCappedSTODetails() {
   let polyCappedSTOFactory = new web3.eth.Contract(polyCappedSTOFactoryABI, polyCappedSTOFactoryAddress);
   polyCappedSTOFactory.setProvider(web3.currentProvider);
   let polyCappedSTOFee = new web3.utils.BN(await polyCappedSTOFactory.methods.getSetupCost().call());
-  console.log(`POLYCappedSTO Fee:         ${web3.utils.fromWei(polyCappedSTOFee)} POLY`)
   console.log(`POLYCappedSTO Description:\n${web3.utils._(await polyCappedSTOFactory.methods.description().call())}`)
+  console.log(chalk.green(`\nCappedSTO deployment requires ${web3.utils.fromWei(polyCappedSTOFee)} POLY payment from '${Issuer.address}'\nCurrent balance is: ${(web3.utils.fromWei(await polyToken.methods.balanceOf(Issuer.address).call()))} POLY`));
 }
 
 async function usdTieredSTODetails() {
@@ -203,8 +203,8 @@ async function usdTieredSTODetails() {
   let usdTieredSTOFactory = new web3.eth.Contract(usdTieredSTOFactoryABI, usdTieredSTOFactoryAddress);
   usdTieredSTOFactory.setProvider(web3.currentProvider);
   let usdTieredSTOFee = new web3.utils.BN(await usdTieredSTOFactory.methods.getSetupCost().call());
-  console.log(`USDTieredSTO Fee:         ${web3.utils.fromWei(usdTieredSTOFee)} POLY`)
   console.log(`USDTieredSTO Description:\n${web3.utils._(await usdTieredSTOFactory.methods.description().call())}`)
+  console.log(chalk.green(`\nCappedSTO deployment requires ${web3.utils.fromWei(usdTieredSTOFee)} POLY payment from '${Issuer.address}'\nCurrent balance is: ${(web3.utils.fromWei(await polyToken.methods.balanceOf(Issuer.address).call()))} POLY`));
 }
 
 ////////////////
