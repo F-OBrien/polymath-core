@@ -574,7 +574,7 @@ async function polyCappedSTO_configure(currentSTO) {
     }
 
     let index = readlineSync.keyInSelect(options, 'What do you want to do?', { cancel: 'RETURN' });
-    let selected = index != -1 ? options[index] : 'Exit';
+    let selected = index != -1 ? options[index] : 'EXIT';
     switch (selected) {
       case 'Finalize STO':
         let reserveWallet = await currentSTO.methods.reserveWallet().call();
@@ -1181,7 +1181,7 @@ async function usdTieredSTO_configure(currentSTO) {
     }
 
     let index = readlineSync.keyInSelect(options, 'What do you want to do?', { cancel: 'RETURN' });
-    let selected = index != -1 ? options[index] : 'Exit';
+    let selected = index != -1 ? options[index] : 'EXIT';
     switch (selected) {
       case 'Finalize STO':
         let reserveWallet = await currentSTO.methods.reserveWallet().call();
@@ -1478,7 +1478,7 @@ async function selectToken() {
     case 'Enter token symbol manually':
       result = readlineSync.question('Enter the token symbol: ');
       break;
-    case 'Exit':
+    case 'EXIT':
       process.exit();
       break;
     default:
