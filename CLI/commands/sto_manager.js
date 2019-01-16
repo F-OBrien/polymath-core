@@ -620,7 +620,7 @@ async function polyCappedSTO_configure(currentSTO) {
         await polyCappedSTO_status(currentSTO);
         break;
       case 'Modify addresses configuration':
-        await modfifyAddresses(currentSTO);
+        await modfifyAddressesPolyCappedSTO(currentSTO);
         await polyCappedSTO_status(currentSTO);
         break;
       case 'Modify cap configuration':
