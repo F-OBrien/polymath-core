@@ -150,8 +150,7 @@ async function addSTOModule(stoConfig) {
       if (readlineSync.keyInYNStrict('\nAre you sure you want to configure and launch this STO?')) {
        let cappedSTO = await cappedSTO_launch(stoConfig);
         await cappedSTO_status(cappedSTO);
-      }
-      else{
+      } else {
         await addSTOModule(stoConfig);
       }
       break;
@@ -487,7 +486,7 @@ function limitsConfigPOLYCappedSTO() {
       return parseInt(input) >= 0;
     },
     limitMessage: "Negative number not allowed",
-    defaultInput: nonAccreditedLimit
+    defaultInput: defaultMaxNonAccreditedInvestors
   }));
 
   return limits;
@@ -504,6 +503,7 @@ async function polyCappedSTO_status(currentSTO) {
   let displayWallet = await currentSTO.methods.wallet().call();
   let displayReserveWallet = await currentSTO.methods.reserveWallet().call();
   let displayRaiseType = 'POLY';
+  let displayIsFinalized = await currentSTO.methods.isFinalized().call() ? "YES" : "NO";
   let displayFundsRaised = await currentSTO.methods.fundsRaised(gbl.constants.FUND_RAISE_TYPES[displayRaiseType]).call();
   let displayWalletBalance = web3.utils.fromWei(await getBalance(displayWallet, gbl.constants.FUND_RAISE_TYPES[displayRaiseType]));
   let displayTokensSold = new web3.utils.BN(await currentSTO.methods.totalTokensSold().call());
@@ -519,7 +519,7 @@ async function polyCappedSTO_status(currentSTO) {
     timeTitle = "STO starts in: ";
     timeRemaining = displayStartTime - now;
   } else {
-    timeTitle = "Time remaining:";
+    timeTitle = "STO ends in:   ";
     timeRemaining = displayEndTime - now;
   }
 
@@ -537,12 +537,13 @@ async function polyCappedSTO_status(currentSTO) {
   - Default Non-Accredited
     investment Limit:              ${web3.utils.fromWei(displayNonAccreditedLimit)} ${displayRaiseType}
   - Maxaimum Number of
-    Non-Accredited Investors:      ${displayMaxNonAccreditedInvestors}
+    Non-Accredited Investors:      ${displayMaxNonAccreditedInvestors == 0 ? 'Unlimited' : displayMaxNonAccreditedInvestors}
   - Wallet:                        ${displayWallet}
   - Wallet Balance:                ${displayWalletBalance} ${displayRaiseType}
   - Reserve Wallet:                ${displayReserveWallet == gbl.constants.ADDRESS_ZERO ? 'Minting of unsold tokens is disabled' : displayReserveWallet}
   -----------------------------------------------
   - ${timeTitle}                ${timeRemaining}
+  - Is Finalized:                  ${displayIsFinalized}
   - Funds raised:                  ${web3.utils.fromWei(displayFundsRaised)} ${displayRaiseType}
   - Tokens sold:                   ${web3.utils.fromWei(displayTokensSold)} ${displayTokenSymbol.toUpperCase()}
   - Tokens remaining:              ${web3.utils.fromWei(displayCap.sub(displayTokensSold))} ${displayTokenSymbol.toUpperCase()}
@@ -561,7 +562,7 @@ async function polyCappedSTO_configure(currentSTO) {
     let options = [];
     options.push('Finalize STO',
       'Change accredited account', 'Change accredited in batch',
-      'Change non accredited limit for an account', 'Change non accredited limits in batch'
+      'Change non accredited limit for an account', 'Change non accredited limits in batch',
       'Modify addresses configuration');
 
     // If STO is not started, you can modify configuration
@@ -577,6 +578,11 @@ async function polyCappedSTO_configure(currentSTO) {
     switch (selected) {
       case 'Finalize STO':
         let reserveWallet = await currentSTO.methods.reserveWallet().call();
+        if (reserveWallet == gbl.constants.ADDRESS_ZERO) {
+          let finalizeAction = currentSTO.methods.finalize();
+          await common.sendTransaction(finalizeAction);
+          break;
+        }
         let isVerified = await securityToken.methods.verifyTransfer(gbl.constants.ADDRESS_ZERO, reserveWallet, 0, web3.utils.fromAscii("")).call();
         if (isVerified) {
           if (readlineSync.keyInYNStrict()) {
@@ -635,19 +641,23 @@ async function polyCappedSTO_configure(currentSTO) {
 
 async function modfifyCapPOLYCappedSTO(currentSTO) {
   let cap = capConfig();
-  let modifyCapAction = currentSTO.methods.modifyCap(cap);
+  let modifyCapAction = currentSTO.methods.modifyCap(web3.utils.toWei(cap.toString()));
   await common.sendTransaction(modifyCapAction);
 }
 
 async function modfifyRatePOLYCappedSTO(currentSTO) {
-  let rate = polyRateConfig();
-  let modifyLimitsRate = currentSTO.methods.modifyRate(rate);
+  let rate = (polyRateConfig());
+  let modifyRateAction = currentSTO.methods.modifyRate(web3.utils.toWei(rate.toString()));
   await common.sendTransaction(modifyRateAction);
 }
 
 async function modfifyLimitsPOLYCappedSTO(currentSTO) {
   let limits = limitsConfigPOLYCappedSTO();
-  let modifyLimitsAction = currentSTO.methods.modifyLimits(limits.nonAccreditedLimit, limits.minimumInvestment);
+  let modifyLimitsAction = currentSTO.methods.modifyLimits(
+    web3.utils.toWei(limits.nonAccreditedLimitPOLY.toString()),
+    web3.utils.toWei(limits.minimumInvestmentPOLY.toString()),
+    limits.maxNonAccreditedInvestors
+  );
   await common.sendTransaction(modifyLimitsAction);
 }
 
