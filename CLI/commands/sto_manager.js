@@ -12,7 +12,6 @@ const STABLE = 'STABLE';
 // Constants
 const ACCREDIT_DATA_CSV = `${__dirname}/../data/STO/USDTieredSTO/accredited_data.csv`;
 const NON_ACCREDIT_LIMIT_DATA_CSV = `${__dirname}/../data/STO/USDTieredSTO/nonAccreditedLimits_data.csv`;
-const ADDRESS_ZERO = '0x0000000000000000000000000000000000000000'
 
 ///////////////////
 // Crowdsale params
@@ -102,6 +101,7 @@ async function showSTO(selectedSTO, currentSTO) {
       break;
     case 'POLYCappedSTO':
       await polyCappedSTO_status(currentSTO);
+      await showAccreditedData(currentSTO);
       break;
     case 'USDTieredSTO':
       await usdTieredSTO_status(currentSTO);
@@ -119,11 +119,7 @@ async function modifySTO(selectedSTO, currentSTO) {
     *********************************`));
       break;
     case 'POLYCappedSTO':
-      console.log(chalk.red(`
-    *********************************
-    This option is not yet available.
-    *********************************`));
-//      await polyCappedSTO_configure(currentSTO);
+      await polyCappedSTO_configure(currentSTO);
       break;
     case 'USDTieredSTO':
       await usdTieredSTO_configure(currentSTO);
@@ -428,7 +424,7 @@ async function addressesConfigPolyCappedSTO() {
     if (addresses.reserveWallet == "") addresses.reserveWallet = Issuer.address;
   }
   else{
-    addresses.reserveWallet = ADDRESS_ZERO;
+    addresses.reserveWallet = gbl.constants.ADDRESS_ZERO;
   }
 
   return addresses;
@@ -544,7 +540,7 @@ async function polyCappedSTO_status(currentSTO) {
     Non-Accredited Investors:      ${displayMaxNonAccreditedInvestors}
   - Wallet:                        ${displayWallet}
   - Wallet Balance:                ${displayWalletBalance} ${displayRaiseType}
-  - Reserve Wallet:                ${displayReserveWallet == ADDRESS_ZERO ? 'Minting of unsold tokens is disabled' : displayReserveWallet}
+  - Reserve Wallet:                ${displayReserveWallet == gbl.constants.ADDRESS_ZERO ? 'Minting of unsold tokens is disabled' : displayReserveWallet}
   -----------------------------------------------
   - ${timeTitle}                ${timeRemaining}
   - Funds raised:                  ${web3.utils.fromWei(displayFundsRaised)} ${displayRaiseType}
@@ -553,6 +549,112 @@ async function polyCappedSTO_status(currentSTO) {
   - Investor count:                ${displayInvestorCount}
   - Non-accredited Investor count: ${displayNonAccreditedCount}
   `);
+}
+
+async function polyCappedSTO_configure(currentSTO) {
+  console.log(chalk.blue('STO Configuration - POLY Capped STO'));
+
+  let isFinalized = await currentSTO.methods.isFinalized().call();
+  if (isFinalized) {
+    console.log(chalk.red(`STO is finalized`));
+  } else {
+    let options = [];
+    options.push('Finalize STO',
+      'Change accredited account', 'Change accredited in batch',
+      'Change non accredited limit for an account', 'Change non accredited limits in batch'
+      'Modify addresses configuration');
+
+    // If STO is not started, you can modify configuration
+    let now = Math.floor(Date.now() / 1000);
+    let startTime = await currentSTO.methods.startTime().call.call();
+    if (now < startTime) {
+      options.push('Modify times configuration', 'Modify cap configuration',
+      'Modify rate configuration', 'Modify limits configuration');
+    }
+
+    let index = readlineSync.keyInSelect(options, 'What do you want to do?', { cancel: 'RETURN' });
+    let selected = index != -1 ? options[index] : 'Exit';
+    switch (selected) {
+      case 'Finalize STO':
+        let reserveWallet = await currentSTO.methods.reserveWallet().call();
+        let isVerified = await securityToken.methods.verifyTransfer(gbl.constants.ADDRESS_ZERO, reserveWallet, 0, web3.utils.fromAscii("")).call();
+        if (isVerified) {
+          if (readlineSync.keyInYNStrict()) {
+            let finalizeAction = currentSTO.methods.finalize();
+            await common.sendTransaction(finalizeAction);
+          }
+        } else {
+          console.log(chalk.red(`Reserve wallet (${reserveWallet}) is not able to receive remaining tokens. Check if this address is whitelisted.`));
+        }
+        break;
+      case 'Change accredited account':
+        let investor = readlineSync.question('Enter the address to change accreditation: ');
+        let isAccredited = readlineSync.keyInYNStrict(`Is ${investor} accredited?`);
+        let investors = [investor];
+        let accredited = [isAccredited];
+        let changeAccreditedAction = currentSTO.methods.changeAccredited(investors, accredited);
+        await common.sendTransaction(changeAccreditedAction);
+        break;
+      case 'Change accredited in batch':
+        await changeAccreditedInBatch(currentSTO);
+        break;
+      case 'Change non accredited limit for an account':
+        let account = readlineSync.question('Enter the address to change non accredited limit: ');
+        let limit = readlineSync.question(`Enter the limit in POLY: `);
+        let accounts = [account];
+        let limits = [web3.utils.toWei(limit)];
+        let changeNonAccreditedLimitAction = currentSTO.methods.changeNonAccreditedLimit(accounts, limits);
+        await common.sendTransaction(changeNonAccreditedLimitAction);
+        break;
+      case 'Change non accredited limits in batch':
+        await changeNonAccreditedLimitsInBatch(currentSTO);
+        break;
+      case 'Modify times configuration':
+        await modfifyTimes(currentSTO);
+        await polyCappedSTO_status(currentSTO);
+        break;
+      case 'Modify addresses configuration':
+        await modfifyAddresses(currentSTO);
+        await polyCappedSTO_status(currentSTO);
+        break;
+      case 'Modify cap configuration':
+        await modfifyCapPOLYCappedSTO(currentSTO);
+        await polyCappedSTO_status(currentSTO);
+        break;
+      case 'Modify rate configuration':
+        await modfifyRatePOLYCappedSTO(currentSTO);
+        await polyCappedSTO_status(currentSTO);
+        break;
+      case 'Modify limits configuration':
+        await modfifyLimitsPOLYCappedSTO(currentSTO);
+        await polyCappedSTO_status(currentSTO);
+        break;
+    }
+  }
+}
+
+async function modfifyCapPOLYCappedSTO(currentSTO) {
+  let cap = capConfig();
+  let modifyCapAction = currentSTO.methods.modifyCap(cap);
+  await common.sendTransaction(modifyCapAction);
+}
+
+async function modfifyRatePOLYCappedSTO(currentSTO) {
+  let rate = polyRateConfig();
+  let modifyLimitsRate = currentSTO.methods.modifyRate(rate);
+  await common.sendTransaction(modifyRateAction);
+}
+
+async function modfifyLimitsPOLYCappedSTO(currentSTO) {
+  let limits = limitsConfigPOLYCappedSTO();
+  let modifyLimitsAction = currentSTO.methods.modifyLimits(limits.nonAccreditedLimit, limits.minimumInvestment);
+  await common.sendTransaction(modifyLimitsAction);
+}
+
+async function modfifyAddressesPolyCappedSTO(currentSTO) {
+  let addresses = await addressesConfigPolyCappedSTO();
+  let modifyAddressesAction = currentSTO.methods.modifyAddresses(addresses.wallet, addresses.reserveWallet);
+  await common.sendTransaction(modifyAddressesAction);
 }
 
 ////////////////////
@@ -1073,7 +1175,7 @@ async function usdTieredSTO_configure(currentSTO) {
     switch (selected) {
       case 'Finalize STO':
         let reserveWallet = await currentSTO.methods.reserveWallet().call();
-        let isVerified = await securityToken.methods.verifyTransfer('0x0000000000000000000000000000000000000000', reserveWallet, 0, web3.utils.fromAscii("")).call();
+        let isVerified = await securityToken.methods.verifyTransfer(gbl.constants.ADDRESS_ZERO, reserveWallet, 0, web3.utils.fromAscii("")).call();
         if (isVerified) {
           if (readlineSync.keyInYNStrict()) {
             let finalizeAction = currentSTO.methods.finalize();
@@ -1301,7 +1403,7 @@ async function initialize(_tokenSymbol) {
     tokenSymbol = _tokenSymbol;
   }
   let securityTokenAddress = await securityTokenRegistry.methods.getSecurityTokenAddress(tokenSymbol).call();
-  if (securityTokenAddress == '0x0000000000000000000000000000000000000000') {
+  if (securityTokenAddress == gbl.constants.ADDRESS_ZERO) {
     console.log(chalk.red(`Selected Security Token ${tokenSymbol} does not exist.`));
     process.exit(0);
   }
