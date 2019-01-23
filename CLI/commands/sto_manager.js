@@ -471,7 +471,7 @@ function limitsConfigPOLYCappedSTO() {
     defaultInput: defaultMinimumInvestment
   });
 
-  let nonAccreditedLimit = 2500;
+  let nonAccreditedLimit = 20000;
   limits.nonAccreditedLimitPOLY = readlineSync.question(`What is the default limit for non-accredited investors in POLY? \nSet to less than the minimum investment to disable default non-accredited investors (${nonAccreditedLimit}): `, {
     limit: function (input) {
       return parseFloat(input) >= 0;
@@ -535,7 +535,7 @@ async function polyCappedSTO_status(currentSTO) {
   - Rate:                          1 ${displayRaiseType} = ${web3.utils.fromWei(displayRate)} ${displayTokenSymbol.toUpperCase()}
   - Minimum Investment:            ${web3.utils.fromWei(displayMinimumInvestment)} ${displayRaiseType}
   - Default Non-Accredited
-    investment Limit:              ${web3.utils.fromWei(displayNonAccreditedLimit)} ${displayRaiseType}
+    investment Limit:              ${web3.utils.fromWei(displayNonAccreditedLimit)} ${displayRaiseType} ${parseFloat(web3.utils.fromWei(displayNonAccreditedLimit)) < parseFloat(web3.utils.fromWei(displayMinimumInvestment)) ? '(Non-Accredited investors cannot invest without an override)' : ''}
   - Maxaimum Number of
     Non-Accredited Investors:      ${displayMaxNonAccreditedInvestors == 0 ? 'Unlimited' : displayMaxNonAccreditedInvestors}
   - Wallet:                        ${displayWallet}
@@ -654,8 +654,8 @@ async function modfifyRatePOLYCappedSTO(currentSTO) {
 async function modfifyLimitsPOLYCappedSTO(currentSTO) {
   let limits = limitsConfigPOLYCappedSTO();
   let modifyLimitsAction = currentSTO.methods.modifyLimits(
-    web3.utils.toWei(limits.nonAccreditedLimitPOLY.toString()),
     web3.utils.toWei(limits.minimumInvestmentPOLY.toString()),
+    web3.utils.toWei(limits.nonAccreditedLimitPOLY.toString()),
     limits.maxNonAccreditedInvestors
   );
   await common.sendTransaction(modifyLimitsAction);
