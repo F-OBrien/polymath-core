@@ -553,10 +553,9 @@ contract POLYCappedSTO is POLYCappedSTOStorage, ISTO, ReentrancyGuard {
 
     /**
      * @notice This function returns the signature of configure function
-     * @return bytes4 Configure function signature
+     * @return bytes4 Configure function signature = bytes4(keccak256("configure(uint256,uint256,uint256,uint256,uint256,uint256,uint256,address,address)"))
      */
     function getInitFunction() public pure returns (bytes4) {
-//        return bytes4(keccak256("configure(uint256, uint256, uint256, uint256, uint256, uint256, uint256, address, address)"));
         return 0xe7830bae;
     }
 }
