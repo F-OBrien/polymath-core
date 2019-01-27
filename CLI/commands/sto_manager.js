@@ -101,7 +101,7 @@ async function showSTO(selectedSTO, currentSTO) {
       break;
     case 'POLYCappedSTO':
       await polyCappedSTO_status(currentSTO);
-      await showAccreditedData(currentSTO);
+      await polyCappedSTO_information(currentSTO);
       break;
     case 'USDTieredSTO':
       await usdTieredSTO_status(currentSTO);
@@ -194,7 +194,7 @@ async function polyCappedSTODetails() {
   polyCappedSTOFactory.setProvider(web3.currentProvider);
   let polyCappedSTOFee = new web3.utils.BN(await polyCappedSTOFactory.methods.getSetupCost().call());
   console.log(`POLYCappedSTO Description:\n${await polyCappedSTOFactory.methods.description().call()}`)
-  console.log(chalk.green(`\nCappedSTO deployment requires ${web3.utils.fromWei(polyCappedSTOFee)} POLY payment from '${Issuer.address}'\nCurrent balance is: ${(web3.utils.fromWei(await polyToken.methods.balanceOf(Issuer.address).call()))} POLY`));
+  console.log(chalk.green(`\nPOLYCappedSTO deployment requires ${web3.utils.fromWei(polyCappedSTOFee)} POLY payment from '${Issuer.address}'\nCurrent balance is: ${(web3.utils.fromWei(await polyToken.methods.balanceOf(Issuer.address).call()))} POLY`));
 }
 
 async function usdTieredSTODetails() {
@@ -204,7 +204,7 @@ async function usdTieredSTODetails() {
   usdTieredSTOFactory.setProvider(web3.currentProvider);
   let usdTieredSTOFee = new web3.utils.BN(await usdTieredSTOFactory.methods.getSetupCost().call());
   console.log(`USDTieredSTO Description:\n${await usdTieredSTOFactory.methods.description().call()}`)
-  console.log(chalk.green(`\nCappedSTO deployment requires ${web3.utils.fromWei(usdTieredSTOFee)} POLY payment from '${Issuer.address}'\nCurrent balance is: ${(web3.utils.fromWei(await polyToken.methods.balanceOf(Issuer.address).call()))} POLY`));
+  console.log(chalk.green(`\nUSDTieredSTO deployment requires ${web3.utils.fromWei(usdTieredSTOFee)} POLY payment from '${Issuer.address}'\nCurrent balance is: ${(web3.utils.fromWei(await polyToken.methods.balanceOf(Issuer.address).call()))} POLY`));
 }
 
 ////////////////
@@ -318,7 +318,7 @@ async function cappedSTO_status(currentSTO) {
   timeRemaining = common.convertToDaysRemaining(timeRemaining);
 
   console.log(`
-  *************** STO Information ***************
+    ******************************* STO INFORMATION ********************************
   - Address:           ${currentSTO.options.address}
   - Raise Cap:         ${web3.utils.fromWei(displayCap)} ${displayTokenSymbol.toUpperCase()}
   - Start Time:        ${new Date(displayStartTime * 1000)}
@@ -327,7 +327,7 @@ async function cappedSTO_status(currentSTO) {
   - Rate:              1 ${displayRaiseType} = ${web3.utils.fromWei(displayRate)} ${displayTokenSymbol.toUpperCase()}
   - Wallet:            ${displayWallet}
   - Wallet Balance:    ${displayWalletBalance} ${displayRaiseType}
-  -----------------------------------------------
+  ----------------------------------------------------------------------------------
   - ${timeTitle}    ${timeRemaining}
   - Funds raised:      ${web3.utils.fromWei(displayFundsRaised)} ${displayRaiseType}
   - Tokens sold:       ${web3.utils.fromWei(displayTokensSold)} ${displayTokenSymbol.toUpperCase()}
@@ -403,7 +403,7 @@ async function polyCappedSTO_launch(stoConfig) {
 async function addressesConfigPolyCappedSTO() {
   let addresses = {};
 
-  addresses.wallet = readlineSync.question('Enter the address that will receive the funds from the STO (' + Issuer.address + '): ', {
+  addresses.wallet = readlineSync.question('- Enter the address that will receive the funds from the STO (' + Issuer.address + '): ', {
     limit: function (input) {
       return web3.utils.isAddress(input);
     },
@@ -412,8 +412,8 @@ async function addressesConfigPolyCappedSTO() {
   });
   if (addresses.wallet == "") addresses.wallet = Issuer.address;
 
-  if (readlineSync.keyInYNStrict('Do you want unsold tokens to be minted if the cap is not met?')) {
-    addresses.reserveWallet = readlineSync.question('Enter the address that will receive unsold tokens (' + Issuer.address + '): ', {
+  if (readlineSync.keyInYNStrict('- Do you want unsold tokens to be minted if the cap is not met?')) {
+    addresses.reserveWallet = readlineSync.question('- Enter the address that will receive unsold tokens (' + Issuer.address + '): ', {
       limit: function (input) {
         return web3.utils.isAddress(input);
       },
@@ -433,7 +433,7 @@ function capConfig() {
   let cap;
 
   let defaultCap = 500000;
-  cap = readlineSync.question(`How many tokens do you plan to sell through this offering? (${defaultCap}): `, {
+  cap = readlineSync.question(`- How many tokens do you plan to sell through this offering? (${defaultCap}): `, {
     limit: function (input) {
       return parseFloat(input) > 0;
     },
@@ -448,7 +448,7 @@ function polyRateConfig() {
   let rate;
 
   let defaultRate = 0.1;
-  rate = readlineSync.question(`Enter the rate (1 POLY = X ${tokenSymbol}) for the STO (${defaultRate}): `, {
+  rate = readlineSync.question(`- Enter the rate (1 POLY = X ${tokenSymbol}) for the STO (${defaultRate}): `, {
     limit: function (input) {
       return parseFloat(input) > 0;
     },
@@ -463,7 +463,7 @@ function limitsConfigPOLYCappedSTO() {
   let limits = {};
 
   let defaultMinimumInvestment = 50;
-  limits.minimumInvestmentPOLY = readlineSync.question(`What is the minimum investment in POLY? (${defaultMinimumInvestment}): `, {
+  limits.minimumInvestmentPOLY = readlineSync.question(`- What is the minimum investment in POLY? (${defaultMinimumInvestment}): `, {
     limit: function (input) {
       return parseFloat(input) > 0;
     },
@@ -472,7 +472,7 @@ function limitsConfigPOLYCappedSTO() {
   });
 
   let nonAccreditedLimit = 20000;
-  limits.nonAccreditedLimitPOLY = readlineSync.question(`What is the default limit for non-accredited investors in POLY? \nSet to less than the minimum investment to disable default non-accredited investors (${nonAccreditedLimit}): `, {
+  limits.nonAccreditedLimitPOLY = readlineSync.question(`- What is the default limit for non-accredited investors in POLY? \n  (Set to less than the minimum investment to disable default non-accredited investors)(${nonAccreditedLimit}): `, {
     limit: function (input) {
       return parseFloat(input) >= 0;
     },
@@ -481,7 +481,7 @@ function limitsConfigPOLYCappedSTO() {
   });
 
   let defaultMaxNonAccreditedInvestors = 0;
-  limits.maxNonAccreditedInvestors = parseInt(readlineSync.question(`What is the maximum number of non-accredited investors? (${defaultMaxNonAccreditedInvestors} = unlimited): `, {
+  limits.maxNonAccreditedInvestors = parseInt(readlineSync.question(`- What is the maximum number of non-accredited investors? (${defaultMaxNonAccreditedInvestors} = unlimited): `, {
     limit: function (input) {
       return parseInt(input) >= 0;
     },
@@ -503,6 +503,7 @@ async function polyCappedSTO_status(currentSTO) {
   let displayWallet = await currentSTO.methods.wallet().call();
   let displayReserveWallet = await currentSTO.methods.reserveWallet().call();
   let displayRaiseType = 'POLY';
+  let displayIsOpen = await currentSTO.methods.isOpen().call();
   let displayIsFinalized = await currentSTO.methods.isFinalized().call() ? "YES" : "NO";
   let displayFundsRaised = await currentSTO.methods.fundsRaised(gbl.constants.FUND_RAISE_TYPES[displayRaiseType]).call();
   let displayWalletBalance = web3.utils.fromWei(await getBalance(displayWallet, gbl.constants.FUND_RAISE_TYPES[displayRaiseType]));
@@ -526,13 +527,14 @@ async function polyCappedSTO_status(currentSTO) {
   timeRemaining = common.convertToDaysRemaining(timeRemaining);
 
   console.log(`
-  *************** STO Information ***************
+  ******************************* STO INFORMATION ********************************
   - Address:                       ${currentSTO.options.address}
+  - Start Time:                    ${new Date(displayStartTime * 1000).toLocaleString()}
+  - End Time:                      ${new Date(displayEndTime * 1000).toLocaleString()}
   - Raise Cap:                     ${web3.utils.fromWei(displayCap)} ${displayTokenSymbol.toUpperCase()}
-  - Start Time:                    ${new Date(displayStartTime * 1000)}
-  - End Time:                      ${new Date(displayEndTime * 1000)}
   - Raise Type:                    ${displayRaiseType}
   - Rate:                          1 ${displayRaiseType} = ${web3.utils.fromWei(displayRate)} ${displayTokenSymbol.toUpperCase()}
+  - Raise Target:                  ${(new web3.utils.BN(displayCap)).div(new web3.utils.BN(displayRate))} ${displayRaiseType}
   - Minimum Investment:            ${web3.utils.fromWei(displayMinimumInvestment)} ${displayRaiseType}
   - Default Non-Accredited
     investment Limit:              ${web3.utils.fromWei(displayNonAccreditedLimit)} ${displayRaiseType} ${parseFloat(web3.utils.fromWei(displayNonAccreditedLimit)) < parseFloat(web3.utils.fromWei(displayMinimumInvestment)) ? '(Non-Accredited investors cannot invest without an override)' : ''}
@@ -541,7 +543,8 @@ async function polyCappedSTO_status(currentSTO) {
   - Wallet:                        ${displayWallet}
   - Wallet Balance:                ${displayWalletBalance} ${displayRaiseType}
   - Reserve Wallet:                ${displayReserveWallet == gbl.constants.ADDRESS_ZERO ? 'Minting of unsold tokens is disabled' : displayReserveWallet}
-  -----------------------------------------------
+  --------------------------------------------------------------------------------
+  - STO Status:                    ${displayIsOpen ? "Offering is open" : "Offering is not open"}
   - ${timeTitle}                ${timeRemaining}
   - Is Finalized:                  ${displayIsFinalized}
   - Funds raised:                  ${web3.utils.fromWei(displayFundsRaised)} ${displayRaiseType}
@@ -550,6 +553,63 @@ async function polyCappedSTO_status(currentSTO) {
   - Investor count:                ${displayInvestorCount}
   - Non-accredited Investor count: ${displayNonAccreditedCount}
   `);
+}
+
+async function polyCappedSTO_information(currentSTO){
+
+  let options = [];
+  options.push('Show Token Purchases', 'Show investor accredited status and limits');
+  let index = readlineSync.keyInSelect(options, 'What do you want to do?', { cancel: 'EXIT' });
+  let optionSelected = index != -1 ? options[index] : 'EXIT';
+  console.log('Selected:', optionSelected, '\n');
+  switch (optionSelected) {
+    case 'Show Token Purchases':
+      await showTokenPurchases(currentSTO);
+      break;
+    case 'Show investor accredited status and limits':
+      await showAccreditedData(currentSTO);
+      break;
+    case 'EXIT':
+      exit = true;
+      break;
+    }
+}
+
+async function showTokenPurchases(currentSTO) {
+  let pastEvents = await web3.eth.getPastLogs({
+     fromBlock: 1,
+     toBlock: 'latest',
+     address: currentSTO.options.address,
+     topics: [null]
+   })
+
+   let eventJsonInterface = currentSTO._jsonInterface.find(o => o.name === 'TokenPurchase' && o.type === 'event');
+   let filteredEvents = pastEvents.filter(l => l.topics.includes(eventJsonInterface.signature));
+   if (filteredEvents.length > 0) {
+   let displayTokenSymbol = await securityToken.methods.symbol().call();
+   let tokenPurchaseTable = [['Date/Time', 'Investor Wallet', 'Invested', 'Received', 'Transaction']];
+   for (event of filteredEvents){
+     let _blockNumber = (event.blockNumber);
+     let blockDetails = await (web3.eth.getBlock(_blockNumber));
+     let blockTime = blockDetails.timestamp
+     let decodedEvent = web3.eth.abi.decodeLog(eventJsonInterface.inputs, event.data, event.topics.slice(1))
+
+     tokenPurchaseTable.push([
+       new Date(blockTime * 1000).toLocaleString(),
+       decodedEvent._beneficiary,
+       web3.utils.fromWei(decodedEvent._value) + ' POLY',
+       web3.utils.fromWei(decodedEvent._amount) + ' ' + displayTokenSymbol.toUpperCase(),
+       event.transactionHash
+       ]);
+     }
+     console.log(`  ******************************* TOKEN PURCHASES ********************************`);
+     console.log(table(tokenPurchaseTable));
+
+   } else {
+     console.log();
+     console.log(chalk.yellow(`There are no token purchases to show`));
+     console.log();
+   }
 }
 
 async function polyCappedSTO_configure(currentSTO) {
@@ -877,7 +937,7 @@ function timesConfig(stoConfig) {
 
   let oneMinuteFromNow = Math.floor(Date.now() / 1000) + 60;
   if (typeof stoConfig === 'undefined') {
-    times.startTime = parseInt(readlineSync.question('Enter the start time for the STO (Unix Epoch time)\n(1 minutes from now = ' + oneMinuteFromNow + ' ): ', {
+    times.startTime = parseInt(readlineSync.question('- Enter the start time for the STO (Unix Epoch time)\n  (1 minutes from now = ' + oneMinuteFromNow + ' ): ', {
       limit: function (input) {
         return parseInt(input) > Math.floor(Date.now() / 1000);
       },
@@ -891,7 +951,7 @@ function timesConfig(stoConfig) {
 
   let oneMonthFromNow = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60);
   if (typeof stoConfig === 'undefined') {
-    times.endTime = parseInt(readlineSync.question('Enter the end time for the STO (Unix Epoch time)\n(1 month from now = ' + oneMonthFromNow + ' ): ', {
+    times.endTime = parseInt(readlineSync.question('- Enter the end time for the STO (Unix Epoch time)\n  (1 month from now = ' + oneMonthFromNow + ' ): ', {
       limit: function (input) {
         return parseInt(input) > times.startTime;
       },
@@ -1119,7 +1179,7 @@ async function usdTieredSTO_status(currentSTO) {
   timeRemaining = common.convertToDaysRemaining(timeRemaining);
 
   console.log(`
-  *********************** STO Information ***********************
+  ******************************* STO INFORMATION ********************************
   - Address:                     ${currentSTO.options.address}
   - Start Time:                  ${new Date(displayStartTime * 1000)}
   - End Time:                    ${new Date(displayEndTime * 1000)}
@@ -1133,7 +1193,7 @@ async function usdTieredSTO_status(currentSTO) {
   - Reserve Wallet:              ${displayReserveWallet}`
     + displayReserveWalletBalancePerType + `
 
-  ---------------------------------------------------------------
+  --------------------------------------------------------------------------------
   - ${timeTitle}              ${timeRemaining}
   - Is Finalized:                ${displayIsFinalized}
   - Tokens Sold:                 ${displayTokensSold} ${displayTokenSymbol}`
@@ -1258,7 +1318,7 @@ async function showAccreditedData(currentSTO) {
       ]);
     }
     console.log();
-    console.log(`************************************ ACCREDITED DATA *************************************`);
+    console.log(`******************************** ACCREDITED DATA ************************************`);
     console.log();
     console.log(table(dataTable));
   } else {
