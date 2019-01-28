@@ -273,7 +273,7 @@ async function investCappedSTO(currency, amount) {
     if (raiseTypes[0] == 'POLY') {
         let userBalance = await polyBalance(User.address);
         if (parseInt(userBalance) >= parseInt(cost)) {
-            let allowance = await polyToken.methods.allowance(STOAddress, User.address).call();
+            let allowance = await polyToken.methods.allowance(User.address, STOAddress).call();
             if (allowance < costWei) {
                 let approveAction = polyToken.methods.approve(STOAddress, costWei);
                 await common.sendTransaction(approveAction, { from: User });
@@ -436,7 +436,7 @@ async function investPolyCappedSTO(currency, amount) {
       if (!readlineSync.keyInYNStrict(`Do you want proceed with your purchase?`)) {
         process.exit();
       }
-      let allowance = await polyToken.methods.allowance(STOAddress, User.address).call();
+      let allowance = await polyToken.methods.allowance(User.address, STOAddress).call();
       if (allowance < investmentAmount) {
           let approveAction = polyToken.methods.approve(STOAddress, investmentAmount);
           await common.sendTransaction(approveAction, { from: User });
@@ -737,7 +737,7 @@ async function investUsdTieredSTO(currency, amount) {
     if (raiseType == POLY) {
         let userBalance = await polyBalance(User.address);
         if (parseInt(userBalance) >= parseInt(cost)) {
-            let allowance = await polyToken.methods.allowance(STOAddress, User.address).call();
+            let allowance = await polyToken.methods.allowance(User.address, STOAddress).call();
             if (allowance < costWei) {
                 let approveAction = polyToken.methods.approve(STOAddress, costWei);
                 await common.sendTransaction(approveAction, { from: User });
@@ -758,7 +758,7 @@ async function investUsdTieredSTO(currency, amount) {
 
         if (parseInt(stableInfo.balance) >= parseInt(cost)) {
             let stableCoin = common.connect(abis.erc20(), stableInfo.address);
-            let allowance = await stableCoin.methods.allowance(STOAddress, User.address).call();
+            let allowance = await stableCoin.methods.allowance(User.address, STOAddress).call();
             if (allowance < costWei) {
                 let approveAction = stableCoin.methods.approve(STOAddress, costWei);
                 await common.sendTransaction(approveAction, { from: User });
