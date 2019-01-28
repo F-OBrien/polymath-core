@@ -449,7 +449,6 @@ contract POLYCappedSTO is POLYCappedSTOStorage, ISTO, ReentrancyGuard {
                 nonAccreditedCount = nonAccreditedCount + 1;
             }
         }
-        investorInvested[_beneficiary] = investorInvested[_beneficiary].add(_tokenAmount);
         _deliverTokens(_beneficiary, _tokenAmount);
     }
 
