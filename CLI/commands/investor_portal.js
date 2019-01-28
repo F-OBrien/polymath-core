@@ -274,7 +274,7 @@ async function investCappedSTO(currency, amount) {
         let userBalance = await polyBalance(User.address);
         if (parseInt(userBalance) >= parseInt(cost)) {
             let allowance = await polyToken.methods.allowance(User.address, STOAddress).call();
-            if (allowance < costWei) {
+            if (parseInt(allowance) < parseInt(costWei)) {
                 let approveAction = polyToken.methods.approve(STOAddress, costWei);
                 await common.sendTransaction(approveAction, { from: User });
             }
@@ -300,26 +300,23 @@ async function investCappedSTO(currency, amount) {
 
 async function showUserInfoForPolyCappedSTO() {
     let displayInvestorInvested = web3.utils.fromWei(await currentSTO.methods.investorInvested(User.address).call());
-    console.log(`    - Total invested in POLY:  ${displayInvestorInvested} POLY`);
-
     await generalTransferManager.methods.whitelist(User.address).call({}, function (error, result) {
         displayCanBuy = result.canBuyFromSTO;
         displayValidKYC = parseInt(result.expiryTime) > Math.floor(Date.now() / 1000);
     });
-    console.log(`    - Whitelisted:             ${(displayCanBuy) ? 'YES' : 'NO'}`);
-    console.log(`    - Valid KYC:               ${(displayValidKYC) ? 'YES' : 'NO'}`);
-
     let investorData = await currentSTO.methods.investors(User.address).call();
     let displayIsUserAccredited = investorData.accredited == 1;
-    console.log(`    - Accredited:              ${(displayIsUserAccredited) ? "YES" : "NO"}`)
-
+    console.log(`    - Whitelisted:             ${(displayCanBuy) ? 'YES' : 'NO'}`);
+    console.log(`    - Valid KYC:               ${(displayValidKYC) ? 'YES' : 'NO'}`);
+    console.log(`    - Accredited:              ${(displayIsUserAccredited) ? "YES" : "NO"}`);
+    console.log(`    - Total invested           ${displayInvestorInvested} POLY`);
     if (!displayIsUserAccredited) {
         let displayOverrideNonAccreditedLimit = web3.utils.fromWei(investorData.nonAccreditedLimitOverride);
         let displayNonAccreditedLimit = displayOverrideNonAccreditedLimit != 0 ? displayOverrideNonAccreditedLimit : web3.utils.fromWei(await currentSTO.methods.nonAccreditedLimit().call());
         let displayTokensRemainingAllocation = displayNonAccreditedLimit - displayInvestorInvested;
+        console.log(`    - Non-Accredited Limit:    ${displayNonAccreditedLimit} POLY`);
         console.log(`    - Remaining allocation:    ${(displayTokensRemainingAllocation > 0 ? displayTokensRemainingAllocation : 0)} POLY`);
     }
-    console.log('\n');
 }
 
 async function showPolyCappedSTOinfo(currentSTO) {
@@ -340,12 +337,6 @@ async function showPolyCappedSTOinfo(currentSTO) {
   let displayTokenSymbol = await securityToken.methods.symbol().call();
 
   let now = Math.floor(Date.now() / 1000);
-
-  await generalTransferManager.methods.whitelist(User.address).call({}, function (error, result) {
-      displayCanBuy = result.canBuyFromSTO;
-      displayValidKYC = parseInt(result.expiryTime) > now;
-  });
-
   let timeTitle;
   let timeRemaining;
 
@@ -424,20 +415,19 @@ async function investPolyCappedSTO(currency, amount) {
     } else {
       investmentAmount = web3.utils.toWei(amt);
       let prePurchaseResults = await currentSTO.methods.prePurchaseChecks(User.address, investmentAmount).call();
-
       let spentValue = (prePurchaseResults._spentValue);
       let tokens = (prePurchaseResults._tokens);
-      console.log(chalk.yellow(`You are going to spend ${web3.utils.fromWei(spentValue)} POLY to buy ${web3.utils.fromWei(tokens)} ${STSymbol}`));
-
       if (parseInt(prePurchaseResults._spentValue) < parseInt(investmentAmount)) {
-        let refund = new web3.utils.BN(investmentAmount).sub(new web3.utils.BN(spentValue));
-        console.log(chalk.yellow(`Due to limits or rounding you will be refunded ${web3.utils.fromWei(refund)} POLY`));
+        console.log(chalk.yellow(`You requested to invest ${amt}. Due to limits or token divisibility and rounding you will be charged ${web3.utils.fromWei(spentValue)} POLY to buy ${web3.utils.fromWei(tokens)} ${STSymbol}`));
+      } else {
+        console.log(chalk.yellow(`You are going to spend ${web3.utils.fromWei(spentValue)} POLY to buy ${web3.utils.fromWei(tokens)} ${STSymbol}`));
       }
       if (!readlineSync.keyInYNStrict(`Do you want proceed with your purchase?`)) {
         process.exit();
       }
       let allowance = await polyToken.methods.allowance(User.address, STOAddress).call();
-      if (allowance < investmentAmount) {
+      console.log(allowance);
+      if (parseInt(allowance) < parseInt(investmentAmount)) {
           let approveAction = polyToken.methods.approve(STOAddress, investmentAmount);
           await common.sendTransaction(approveAction, { from: User });
       }
@@ -738,7 +728,7 @@ async function investUsdTieredSTO(currency, amount) {
         let userBalance = await polyBalance(User.address);
         if (parseInt(userBalance) >= parseInt(cost)) {
             let allowance = await polyToken.methods.allowance(User.address, STOAddress).call();
-            if (allowance < costWei) {
+            if (parseInt(allowance) < parseInt(costWei)) {
                 let approveAction = polyToken.methods.approve(STOAddress, costWei);
                 await common.sendTransaction(approveAction, { from: User });
             }
@@ -759,7 +749,7 @@ async function investUsdTieredSTO(currency, amount) {
         if (parseInt(stableInfo.balance) >= parseInt(cost)) {
             let stableCoin = common.connect(abis.erc20(), stableInfo.address);
             let allowance = await stableCoin.methods.allowance(User.address, STOAddress).call();
-            if (allowance < costWei) {
+            if (parseInt(allowance) < parseInt(costWei)) {
                 let approveAction = stableCoin.methods.approve(STOAddress, costWei);
                 await common.sendTransaction(approveAction, { from: User });
             }
