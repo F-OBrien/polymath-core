@@ -12,6 +12,7 @@ const SecurityToken = artifacts.require("./SecurityToken.sol");
 const GeneralTransferManager = artifacts.require("./GeneralTransferManager");
 const GeneralPermissionManager = artifacts.require("./GeneralPermissionManager");
 const PolyTokenFaucet = artifacts.require("./PolyTokenFaucet.sol");
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require("web3");
 let BN = Web3.utils.BN;
@@ -24,7 +25,7 @@ contract("USDTieredSTO Sim", async (accounts) => {
     let POLYMATH;
     let ISSUER;
     let WALLET;
-    let RESERVEWALLET;
+    let TREASURYWALLET;
     let INVESTOR1;
     let ACCREDITED1;
     let ACCREDITED2;
@@ -58,6 +59,8 @@ contract("USDTieredSTO Sim", async (accounts) => {
     let I_DaiToken;
     let I_PolymathRegistry;
     let I_STRGetter;
+    let I_STGetter;
+    let stGetter;
 
     // SecurityToken Details for funds raise Type ETH
     const NAME = "Team";
@@ -70,7 +73,7 @@ contract("USDTieredSTO Sim", async (accounts) => {
     const STOKEY = 3;
 
     // Initial fee for ticker registry and security token registry
-    const REGFEE = new BN(web3.utils.toWei("250"));
+    const REGFEE = new BN(web3.utils.toWei("1000"));
     const STOSetupCost = 0;
 
     // MockOracle USD prices
@@ -88,7 +91,7 @@ contract("USDTieredSTO Sim", async (accounts) => {
     let _minimumInvestmentUSD = [];
     let _fundRaiseTypes = [];
     let _wallet = [];
-    let _reserveWallet = [];
+    let _treasuryWallet = [];
     let _usdToken = [];
 
     const address_zero = "0x0000000000000000000000000000000000000000";
@@ -105,7 +108,7 @@ contract("USDTieredSTO Sim", async (accounts) => {
         uint256 _minimumInvestmentUSD,
         uint8[] _fundRaiseTypes,
         address _wallet,
-        address _reserveWallet,
+        address _treasuryWallet,
         address _usdToken
     ) */
     const functionSignature = {
@@ -154,7 +157,7 @@ contract("USDTieredSTO Sim", async (accounts) => {
             },
             {
                 type: "address",
-                name: "_reserveWallet"
+                name: "_treasuryWallet"
             },
             {
                 type: "address[]",
@@ -184,7 +187,7 @@ contract("USDTieredSTO Sim", async (accounts) => {
         POLYMATH = accounts[0];
         ISSUER = accounts[1];
         WALLET = accounts[2];
-        RESERVEWALLET = WALLET;
+        TREASURYWALLET = WALLET;
         ACCREDITED1 = accounts[3];
         ACCREDITED2 = accounts[4];
         NONACCREDITED1 = accounts[5];
@@ -210,7 +213,8 @@ contract("USDTieredSTO Sim", async (accounts) => {
             I_SecurityTokenRegistry,
             I_SecurityTokenRegistryProxy,
             I_STRProxied,
-            I_STRGetter
+            I_STRGetter,
+            I_STGetter
         ] = instances;
 
         I_DaiToken = await PolyTokenFaucet.new({ from: POLYMATH });
@@ -257,11 +261,12 @@ contract("USDTieredSTO Sim", async (accounts) => {
             await I_PolyToken.getTokens(REGFEE, ISSUER);
             await I_PolyToken.approve(I_STRProxied.address, REGFEE, { from: ISSUER });
 
-            let tx = await I_STRProxied.generateSecurityToken(NAME, SYMBOL, TOKENDETAILS, true, { from: ISSUER });
+            let tx = await I_STRProxied.generateSecurityToken(NAME, SYMBOL, TOKENDETAILS, true, ISSUER, 0, { from: ISSUER });
             assert.equal(tx.logs[2].args._ticker, SYMBOL, "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), ISSUER, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -270,7 +275,7 @@ contract("USDTieredSTO Sim", async (accounts) => {
         });
 
         it("Should intialize the auto attached modules", async () => {
-            let moduleData = (await I_SecurityToken.getModulesByType(TMKEY))[0];
+            let moduleData = (await stGetter.getModulesByType(TMKEY))[0];
             I_GeneralTransferManager = await GeneralTransferManager.at(moduleData);
         });
 
@@ -287,7 +292,7 @@ contract("USDTieredSTO Sim", async (accounts) => {
             _minimumInvestmentUSD.push(new BN(0)); // 1 wei USD
             _fundRaiseTypes.push([0, 1, 2]);
             _wallet.push(WALLET);
-            _reserveWallet.push(RESERVEWALLET);
+            _treasuryWallet.push(TREASURYWALLET);
             _usdToken.push(I_DaiToken.address);
 
             let config = [
@@ -301,7 +306,7 @@ contract("USDTieredSTO Sim", async (accounts) => {
                 _minimumInvestmentUSD[stoId],
                 _fundRaiseTypes[stoId],
                 _wallet[stoId],
-                _reserveWallet[stoId],
+                _treasuryWallet[stoId],
                 [_usdToken[stoId]]
             ];
 
@@ -348,8 +353,8 @@ contract("USDTieredSTO Sim", async (accounts) => {
             );
             assert.equal(await I_USDTieredSTO_Array[stoId].wallet.call(), _wallet[stoId], "Incorrect _wallet in config");
             assert.equal(
-                await I_USDTieredSTO_Array[stoId].reserveWallet.call(),
-                _reserveWallet[stoId],
+                await I_USDTieredSTO_Array[stoId].treasuryWallet.call(),
+                _treasuryWallet[stoId],
                 "Incorrect _reserveWallet in config"
             );
             assert.equal(
@@ -372,17 +377,20 @@ contract("USDTieredSTO Sim", async (accounts) => {
             let expiryTime = toTime + duration.days(100);
             let canBuyFromSTO = true;
 
-            await I_GeneralTransferManager.modifyWhitelist(ACCREDITED1, fromTime, toTime, expiryTime, canBuyFromSTO, { from: ISSUER });
-            await I_GeneralTransferManager.modifyWhitelist(ACCREDITED2, fromTime, toTime, expiryTime, canBuyFromSTO, { from: ISSUER });
-            await I_GeneralTransferManager.modifyWhitelist(NONACCREDITED1, fromTime, toTime, expiryTime, canBuyFromSTO, { from: ISSUER });
-            await I_GeneralTransferManager.modifyWhitelist(NONACCREDITED2, fromTime, toTime, expiryTime, canBuyFromSTO, { from: ISSUER });
-            await I_GeneralTransferManager.modifyWhitelist(NOTAPPROVED, fromTime, toTime, expiryTime, false, { from: ISSUER });
+            await I_GeneralTransferManager.modifyKYCData(ACCREDITED1, fromTime, toTime, expiryTime, { from: ISSUER });
+            await I_GeneralTransferManager.modifyInvestorFlag(ACCREDITED1, 0, true, { from: ISSUER });
+            await I_GeneralTransferManager.modifyKYCData(ACCREDITED2, fromTime, toTime, expiryTime, { from: ISSUER });
+            await I_GeneralTransferManager.modifyInvestorFlag(ACCREDITED2, 0, true, { from: ISSUER });
+            await I_GeneralTransferManager.modifyKYCData(NONACCREDITED1, fromTime, toTime, expiryTime, { from: ISSUER });
+            await I_GeneralTransferManager.modifyKYCData(NONACCREDITED2, fromTime, toTime, expiryTime, { from: ISSUER });
+            await I_GeneralTransferManager.modifyKYCData(NOTAPPROVED, fromTime, toTime, expiryTime, { from: ISSUER });
+            await I_GeneralTransferManager.modifyInvestorFlag(NOTAPPROVED, 1, true, { from: ISSUER });
 
             await increaseTime(duration.days(3));
 
             // Accreditation
-            await I_USDTieredSTO_Array[stoId].changeAccredited([ACCREDITED1, ACCREDITED2], [true, true], { from: ISSUER });
-            await I_USDTieredSTO_Array[stoId].changeAccredited([NONACCREDITED1, NONACCREDITED2], [false, false], { from: ISSUER });
+            await I_GeneralTransferManager.modifyInvestorFlag(ACCREDITED1, 0, true, { from: ISSUER });
+            await I_GeneralTransferManager.modifyInvestorFlag(ACCREDITED2, 0, true, { from: ISSUER });
         });
     });
 

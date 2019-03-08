@@ -1,9 +1,10 @@
 import latestTime from "./helpers/latestTime";
 import { catchRevert } from "./helpers/exceptions";
-import takeSnapshot, { increaseTime, revertToSnapshot } from "./helpers/time";
+import { takeSnapshot, increaseTime, revertToSnapshot } from "./helpers/time";
 import { setUpPolymathNetwork } from "./helpers/createInstances";
 const SecurityToken = artifacts.require("./SecurityToken.sol");
 const DataStore = artifacts.require("./DataStore.sol");
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require("web3");
 let BN = Web3.utils.BN;
@@ -29,7 +30,8 @@ contract("Data store", async (accounts) => {
     let I_ModuleRegistryProxy;
     let I_MRProxied;
     let I_STRGetter;
-
+    let I_STGetter;
+    let stGetter;
     // SecurityToken Details
     const name = "Team";
     const symbol = "sap";
@@ -41,7 +43,7 @@ contract("Data store", async (accounts) => {
     const bytes32data2 = "0x4400000000000000000000000000000000000000000000000000000000000000";
 
     // Initial fee for ticker registry and security token registry
-    const initRegFee = new BN(web3.utils.toWei("250"));
+    const initRegFee = new BN(web3.utils.toWei("1000"));
 
     const address_zero = "0x0000000000000000000000000000000000000000";
     const address_one = "0x0000000000000000000000000000000000000001";
@@ -66,7 +68,8 @@ contract("Data store", async (accounts) => {
             I_SecurityTokenRegistry,
             I_SecurityTokenRegistryProxy,
             I_STRProxied,
-            I_STRGetter
+            I_STRGetter,
+            I_STGetter
         ] = instances;
 
 
@@ -97,13 +100,14 @@ contract("Data store", async (accounts) => {
         it("Should generate the new security token with the same symbol as registered above", async () => {
             await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
 
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, { from: token_owner });
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, token_owner, 0, { from: token_owner });
 
             // Verify the successful generation of the security token
             assert.equal(tx.logs[2].args._ticker, symbol.toUpperCase(), "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), token_owner, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', { filter: { transactionHash: tx.transactionHash } }))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -218,6 +222,8 @@ contract("Data store", async (accounts) => {
             let arrLen = await I_DataStore.getUint256ArrayLength(key);
             await I_DataStore.insertUint256(key, new BN(10), { from: token_owner });
             let arrElement = await I_DataStore.getUint256ArrayElement(key, arrLen.toNumber());
+            let arrElements = await I_DataStore.getUint256ArrayElements(key, 0, arrLen.toNumber());
+            assert.equal(arrElement.toNumber(), arrElements[arrLen.toNumber()].toNumber());
             assert.equal(arrLen.toNumber() + 1, (await I_DataStore.getUint256ArrayLength(key)).toNumber(), "Incorrect Array Length");
             assert.equal(arrElement.toNumber(), 10, "Incorrect array element");
         });
@@ -226,6 +232,8 @@ contract("Data store", async (accounts) => {
             let arrLen = await I_DataStore.getBytes32ArrayLength(key);
             await I_DataStore.insertBytes32(key, bytes32data, { from: token_owner });
             let arrElement = await I_DataStore.getBytes32ArrayElement(key, arrLen.toNumber());
+            let arrElements = await I_DataStore.getBytes32ArrayElements(key, 0, arrLen.toNumber());
+            assert.equal(arrElement, arrElements[arrLen.toNumber()]);
             assert.equal(arrLen.toNumber() + 1, (await I_DataStore.getBytes32ArrayLength(key)).toNumber(), "Incorrect Array Length");
             assert.equal(arrElement, bytes32data, "Incorrect array element");
         });
@@ -234,6 +242,8 @@ contract("Data store", async (accounts) => {
             let arrLen = await I_DataStore.getAddressArrayLength(key);
             await I_DataStore.insertAddress(key, address_one, { from: token_owner });
             let arrElement = await I_DataStore.getAddressArrayElement(key, arrLen.toNumber());
+            let arrElements = await I_DataStore.getAddressArrayElements(key, 0, arrLen.toNumber());
+            assert.equal(arrElement, arrElements[arrLen.toNumber()]);
             assert.equal(arrLen.toNumber() + 1, (await I_DataStore.getAddressArrayLength(key)).toNumber(), "Incorrect Array Length");
             assert.equal(arrElement, address_one, "Incorrect array element");
         });
@@ -242,6 +252,8 @@ contract("Data store", async (accounts) => {
             let arrLen = await I_DataStore.getBoolArrayLength(key);
             await I_DataStore.insertBool(key, true, { from: token_owner });
             let arrElement = await I_DataStore.getBoolArrayElement(key, arrLen.toNumber());
+            let arrElements = await I_DataStore.getBoolArrayElements(key, 0, arrLen.toNumber());
+            assert.equal(arrElement, arrElements[arrLen.toNumber()]);
             assert.equal(arrLen.toNumber() + 1, (await I_DataStore.getBoolArrayLength(key)).toNumber(), "Incorrect Array Length");
             assert.equal(arrElement, true, "Incorrect array element");
         });
@@ -422,7 +434,7 @@ contract("Data store", async (accounts) => {
         });
 
         it("Should not allow unauthorized addresses to delete bytes32 from Array", async () => {
-            await catchRevert(I_DataStore.deleteBytes32(key, 0, { from: account_polymath }));        
+            await catchRevert(I_DataStore.deleteBytes32(key, 0, { from: account_polymath }));
         });
 
         it("Should not allow unauthorized addresses to delete address from Array", async () => {

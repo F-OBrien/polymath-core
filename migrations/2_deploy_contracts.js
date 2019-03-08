@@ -25,9 +25,11 @@ const FeatureRegistry = artifacts.require("./FeatureRegistry.sol");
 const STFactory = artifacts.require("./tokens/STFactory.sol");
 const DevPolyToken = artifacts.require("./helpers/PolyTokenFaucet.sol");
 const MockOracle = artifacts.require("./MockOracle.sol");
+const StableOracle = artifacts.require("./StableOracle.sol");
 const TokenLib = artifacts.require("./TokenLib.sol");
 const SecurityToken = artifacts.require("./tokens/SecurityToken.sol");
 const STRGetter = artifacts.require('./STRGetter.sol');
+const STGetter = artifacts.require('./STGetter.sol');
 const DataStoreLogic = artifacts.require('./DataStore.sol');
 const DataStoreFactory = artifacts.require('./DataStoreFactory.sol');
 const VolumeRestrictionTMFactory = artifacts.require('./VolumeRestrictionTMFactory.sol')
@@ -44,6 +46,7 @@ let PolyToken;
 let UsdToken;
 let ETHOracle;
 let POLYOracle;
+let StablePOLYOracle;
 
 module.exports = function(deployer, network, accounts) {
     // Ethereum account address hold by the Polymath (Act as the main account which have ownable permissions)
@@ -68,11 +71,22 @@ module.exports = function(deployer, network, accounts) {
                 web3.utils.fromAscii("USD"),
                 new BN(5).mul(new BN(10).pow(new BN(17))),
                 { from: PolymathAccount }
-            )
-            .then(() => {
-                MockOracle.deployed().then(mockedOracle => {
-                    POLYOracle = mockedOracle.address;
-                });
+            ).then(() => {
+                return MockOracle.deployed();
+            }).then(mockedOracle => {
+                POLYOracle = mockedOracle.address;
+            }).then(() => {
+                return deployer
+                    .deploy(
+                        StableOracle,
+                        POLYOracle,
+                        new BN(10).mul(new BN(10).pow(new BN(16))),
+                        { from: PolymathAccount }
+                    );
+            }).then(() => {
+                return StableOracle.deployed();
+            }).then(stableOracle => {
+                    StablePOLYOracle = stableOracle.address;
             });
         deployer
             .deploy(
@@ -94,12 +108,14 @@ module.exports = function(deployer, network, accounts) {
         PolyToken = "0xb347b9f5b56b431b2cf4e1d90a5995f7519ca792"; // PolyToken Kovan Faucet Address
         POLYOracle = "0x461d98EF2A0c7Ac1416EF065840fF5d4C946206C"; // Poly Oracle Kovan Address
         ETHOracle = "0xCE5551FC9d43E9D2CC255139169FC889352405C8"; // ETH Oracle Kovan Address
+        StablePOLYOracle = ""; // TODO
     } else if (network === "mainnet") {
         web3 = new Web3(new Web3.providers.HttpProvider("https://mainnet.infura.io/g5xfoQ0jFSE9S5LwM1Ei"));
         PolymathAccount = accounts[0];
         PolyToken = "0x9992eC3cF6A55b00978cdDF2b27BC6882d88D1eC"; // Mainnet PolyToken Address
         POLYOracle = "0x52cb4616E191Ff664B0bff247469ce7b74579D1B"; // Poly Oracle Mainnet Address
         ETHOracle = "0x60055e9a93aae267da5a052e95846fa9469c0e7a"; // ETH Oracle Mainnet Address
+        StablePOLYOracle = ""; // TODO
     }
     if (network === "coverage") {
         web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545"));
@@ -108,9 +124,21 @@ module.exports = function(deployer, network, accounts) {
         deployer
             .deploy(MockOracle, PolyToken, web3.utils.fromAscii("POLY"), web3.utils.fromAscii("USD"), new BN(0.5).mul(new BN(10).pow(new BN(18))), { from: PolymathAccount })
             .then(() => {
-                MockOracle.deployed().then(mockedOracle => {
-                    POLYOracle = mockedOracle.address;
-                });
+                return MockOracle.deployed();
+            }).then(mockedOracle => {
+                POLYOracle = mockedOracle.address;
+            }).then(() => {
+                return deployer
+                    .deploy(
+                        StableOracle,
+                        POLYOracle,
+                        new BN(10).mul(new BN(10).pow(new BN(16))),
+                        { from: PolymathAccount }
+                    )
+            }).then(() => {
+                return StableOracle.deployed();
+            }).then(stableOracle => {
+                StablePOLYOracle = stableOracle.address;
             });
         deployer.deploy(MockOracle, nullAddress, web3.utils.fromAscii("ETH"), web3.utils.fromAscii("USD"), new BN(500).mul(new BN(10).pow(new BN(18))), { from: PolymathAccount }).then(() => {
             MockOracle.deployed().then(mockedOracle => {
@@ -188,6 +216,7 @@ module.exports = function(deployer, network, accounts) {
             deployer.link(VolumeRestrictionLib, VolumeRestrictionTMLogic);
             deployer.link(TokenLib, SecurityToken);
             deployer.link(TokenLib, STFactory);
+            deployer.link(TokenLib, STGetter);
             // A) Deploy the ModuleRegistry Contract (It contains the list of verified ModuleFactory)
             return deployer.deploy(ModuleRegistry, { from: PolymathAccount });
         })
@@ -252,7 +281,7 @@ module.exports = function(deployer, network, accounts) {
         .then(() => {
             // B) Deploy the VolumeRestrictionTMLogic Contract (Factory used to generate the VolumeRestrictionTM contract and this
             // manager attach with the securityToken contract at the time of deployment)
-            return deployer.deploy(VolumeRestrictionTMLogic, "0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000", { from: PolymathAccount });
+            return deployer.deploy(VolumeRestrictionTMLogic, nullAddress, nullAddress, { from: PolymathAccount });
         })
         .then(() => {
             // B) Deploy the CappedSTOLogic Contract (Factory used to generate the CappedSTO contract and this
@@ -270,60 +299,64 @@ module.exports = function(deployer, network, accounts) {
         .then(() => {
             // B) Deploy the GeneralTransferManagerFactory Contract (Factory used to generate the GeneralTransferManager contract and this
             // manager attach with the securityToken contract at the time of deployment)
-            return deployer.deploy(GeneralTransferManagerFactory, new BN(0), new BN(0), new BN(0), GeneralTransferManagerLogic.address, {
+            return deployer.deploy(GeneralTransferManagerFactory, new BN(0), new BN(0), GeneralTransferManagerLogic.address, polymathRegistry.address, {
                 from: PolymathAccount
             });
         })
         .then(() => {
             // C) Deploy the GeneralPermissionManagerFactory Contract (Factory used to generate the GeneralPermissionManager contract and
             // this manager attach with the securityToken contract at the time of deployment)
-            return deployer.deploy(GeneralPermissionManagerFactory, new BN(0), new BN(0), new BN(0), GeneralPermissionManagerLogic.address, {
+            return deployer.deploy(GeneralPermissionManagerFactory, new BN(0), new BN(0), GeneralPermissionManagerLogic.address, polymathRegistry.address, {
                 from: PolymathAccount
             });
         })
         .then(() => {
             // D) Deploy the CountTransferManagerFactory Contract (Factory used to generate the CountTransferManager contract use
             // to track the counts of the investors of the security token)
-            return deployer.deploy(CountTransferManagerFactory, new BN(0), new BN(0), new BN(0), CountTransferManagerLogic.address, {
+            return deployer.deploy(CountTransferManagerFactory, new BN(0), new BN(0), CountTransferManagerLogic.address, polymathRegistry.address, {
                 from: PolymathAccount
             });
         })
         .then(() => {
             // D) Deploy the PercentageTransferManagerFactory Contract (Factory used to generate the PercentageTransferManager contract use
             // to track the percentage of investment the investors could do for a particular security token)
-            return deployer.deploy(PercentageTransferManagerFactory, new BN(0), new BN(0), new BN(0), PercentageTransferManagerLogic.address, {
+            return deployer.deploy(PercentageTransferManagerFactory, new BN(0), new BN(0), PercentageTransferManagerLogic.address, polymathRegistry.address, {
                 from: PolymathAccount
             });
         })
         .then(() => {
             // D) Deploy the EtherDividendCheckpointFactory Contract (Factory used to generate the EtherDividendCheckpoint contract use
             // to provide the functionality of the dividend in terms of ETH)
-            return deployer.deploy(EtherDividendCheckpointFactory, new BN(0), new BN(0), new BN(0), EtherDividendCheckpointLogic.address, {
+            return deployer.deploy(EtherDividendCheckpointFactory, new BN(0), new BN(0), EtherDividendCheckpointLogic.address, polymathRegistry.address, {
                 from: PolymathAccount
             });
         })
         .then(() => {
             // D) Deploy the ERC20DividendCheckpointFactory Contract (Factory used to generate the ERC20DividendCheckpoint contract use
             // to provide the functionality of the dividend in terms of ERC20 token)
-            return deployer.deploy(ERC20DividendCheckpointFactory, new BN(0), new BN(0), new BN(0), ERC20DividendCheckpointLogic.address, {
+            return deployer.deploy(ERC20DividendCheckpointFactory, new BN(0), new BN(0), ERC20DividendCheckpointLogic.address, polymathRegistry.address, {
                 from: PolymathAccount
             });
         })
         .then(() => {
             // D) Deploy the VolumeRestrictionTMFactory Contract (Factory used to generate the VolumeRestrictionTM contract use
             // to provide the functionality of restricting the token volume)
-            return deployer.deploy(VolumeRestrictionTMFactory, new BN(0), new BN(0), new BN(0), VolumeRestrictionTMLogic.address, { from: PolymathAccount });
+            return deployer.deploy(VolumeRestrictionTMFactory, new BN(0), new BN(0), VolumeRestrictionTMLogic.address, polymathRegistry.address, { from: PolymathAccount });
         })
         .then(() => {
             // D) Deploy the ManualApprovalTransferManagerFactory Contract (Factory used to generate the ManualApprovalTransferManager contract use
             // to manual approve the transfer that will overcome the other transfer restrictions)
-            return deployer.deploy(ManualApprovalTransferManagerFactory, new BN(0), new BN(0), new BN(0), ManualApprovalTransferManagerLogic.address, {
+            return deployer.deploy(ManualApprovalTransferManagerFactory, new BN(0), new BN(0), ManualApprovalTransferManagerLogic.address, polymathRegistry.address, {
                 from: PolymathAccount
             });
         })
         .then(() => {
+            // Deploy the STGetter contract (Logic contract that have the getters of the securityToken)
+            return deployer.deploy(STGetter, { from: PolymathAccount });
+        })
+        .then(() => {
             // H) Deploy the STVersionProxy001 Contract which contains the logic of deployment of securityToken.
-            return deployer.deploy(STFactory, GeneralTransferManagerFactory.address, DataStoreFactory.address, { from: PolymathAccount });
+            return deployer.deploy(STFactory, GeneralTransferManagerFactory.address, DataStoreFactory.address, STGetter.address, { from: PolymathAccount });
         })
         .then(() => {
             // K) Deploy the FeatureRegistry contract to control feature switches
@@ -457,7 +490,7 @@ module.exports = function(deployer, network, accounts) {
         })
         .then(() => {
             // M) Deploy the CappedSTOFactory (Use to generate the CappedSTO contract which will used to collect the funds ).
-            return deployer.deploy(CappedSTOFactory, cappedSTOSetupCost, new BN(0), new BN(0), CappedSTOLogic.address, { from: PolymathAccount });
+            return deployer.deploy(CappedSTOFactory, cappedSTOSetupCost, new BN(0), CappedSTOLogic.address, polymathRegistry.address, { from: PolymathAccount });
         })
         .then(() => {
             // N) Register the CappedSTOFactory in the ModuleRegistry to make the factory available at the protocol level.
@@ -472,7 +505,7 @@ module.exports = function(deployer, network, accounts) {
         })
         .then(() => {
             // H) Deploy the USDTieredSTOFactory (Use to generate the USDTieredSTOFactory contract which will used to collect the funds ).
-            return deployer.deploy(USDTieredSTOFactory, usdTieredSTOSetupCost, new BN(0), new BN(0), USDTieredSTOLogic.address, { from: PolymathAccount });
+            return deployer.deploy(USDTieredSTOFactory, usdTieredSTOSetupCost, new BN(0), USDTieredSTOLogic.address, polymathRegistry.address, { from: PolymathAccount });
         })
         .then(() => {
             // I) Register the USDTieredSTOFactory in the ModuleRegistry to make the factory available at the protocol level.
@@ -492,7 +525,8 @@ module.exports = function(deployer, network, accounts) {
             return polymathRegistry.changeAddress("EthUsdOracle", ETHOracle, { from: PolymathAccount });
         })
         .then(() => {
-            return deployer.deploy(SecurityToken, "a", "a", 18, 1, "a", polymathRegistry.address, { from: PolymathAccount });
+            return deployer.deploy(SecurityToken, "a", "a", 18, 1, "a", polymathRegistry.address, STGetter.address, { from: PolymathAccount });
+            return polymathRegistry.changeAddress("StablePolyUsdOracle", StablePOLYOracle, { from: PolymathAccount });
         })
         .then(() => {
             console.log("\n");
@@ -507,6 +541,7 @@ module.exports = function(deployer, network, accounts) {
 
     ETHOracle:                            ${ETHOracle}
     POLYOracle:                           ${POLYOracle}
+    POLYStableOracle:                     ${StablePOLYOracle}
 
     STFactory:                            ${STFactory.address}
     GeneralTransferManagerLogic:          ${GeneralTransferManagerLogic.address}

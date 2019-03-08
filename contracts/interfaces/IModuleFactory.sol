@@ -4,16 +4,15 @@ pragma solidity ^0.5.0;
  * @title Interface that every module factory contract should implement
  */
 interface IModuleFactory {
-    event ChangeFactorySetupFee(uint256 _oldSetupCost, uint256 _newSetupCost, address _moduleFactory);
-    event ChangeFactoryUsageFee(uint256 _oldUsageCost, uint256 _newUsageCost, address _moduleFactory);
-    event ChangeFactorySubscriptionFee(uint256 _oldSubscriptionCost, uint256 _newMonthlySubscriptionCost, address _moduleFactory);
+    event ChangeSetupCost(uint256 _oldSetupCost, uint256 _newSetupCost);
+    event ChangeUsageCost(uint256 _oldUsageCost, uint256 _newUsageCost);
     event GenerateModuleFromFactory(
         address _module,
         bytes32 indexed _moduleName,
         address indexed _moduleFactory,
         address _creator,
         uint256 _setupCost,
-        uint256 _timestamp
+        uint256 _setupCostInPoly
     );
     event ChangeSTVersionBound(string _boundType, uint8 _major, uint8 _minor, uint8 _patch);
 
@@ -21,42 +20,56 @@ interface IModuleFactory {
     function deploy(bytes calldata _data) external returns(address);
 
     /**
-     * @notice Type of the Module factory
+     * @notice Get the tags related to the module factory
      */
-    function getTypes() external view returns(uint8[] memory);
-
-    /**
-     * @notice Get the name of the Module
-     */
-    function getName() external view returns(bytes32);
-
-    /**
-     * @notice Returns the instructions associated with the module
-     */
-    function getInstructions() external view returns(string memory);
+    function version() external view returns(string memory);
 
     /**
      * @notice Get the tags related to the module factory
      */
-    function getTags() external view returns(bytes32[] memory);
+    function name() external view returns(bytes32);
+
+    /**
+     * @notice Returns the title associated with the module
+     */
+    function title() external view returns(string memory);
+
+    /**
+     * @notice Returns the description associated with the module
+     */
+    function description() external view returns(string memory);
+
+    /**
+     * @notice Get the setup cost of the module in USD
+     */
+    function usageCost() external returns(uint256);
+
+    /**
+     * @notice Get the setup cost of the module in USD
+     */
+    function setupCost() external returns(uint256);
+
+    /**
+     * @notice Type of the Module factory
+     */
+    function types() external view returns(uint8[] memory);
+
+    /**
+     * @notice Get the tags related to the module factory
+     */
+    function tags() external view returns(bytes32[] memory);
 
     /**
      * @notice Used to change the setup fee
      * @param _newSetupCost New setup fee
      */
-    function changeFactorySetupFee(uint256 _newSetupCost) external;
+    function changeSetupCost(uint256 _newSetupCost) external;
 
     /**
      * @notice Used to change the usage fee
      * @param _newUsageCost New usage fee
      */
-    function changeFactoryUsageFee(uint256 _newUsageCost) external;
-
-    /**
-     * @notice Used to change the subscription fee
-     * @param _newSubscriptionCost New subscription fee
-     */
-    function changeFactorySubscriptionFee(uint256 _newSubscriptionCost) external;
+    function changeUsageCost(uint256 _newUsageCost) external;
 
     /**
      * @notice Function use to change the lower and upper bound of the compatible version st
@@ -66,20 +79,25 @@ interface IModuleFactory {
     function changeSTVersionBounds(string calldata _boundType, uint8[] calldata _newVersion) external;
 
     /**
+     * @notice Get the setup cost of the module in USD
+     */
+    function usageCostInPoly() external returns(uint256);
+
+    /**
      * @notice Get the setup cost of the module
      */
-    function getSetupCost() external view returns(uint256);
+    function setupCostInPoly() external returns (uint256);
 
     /**
      * @notice Used to get the lower bound
      * @return Lower bound
      */
-    function getLowerSTVersionBounds() external view returns(uint8[] memory);
+    function lowerSTVersionBounds() external view returns(uint8[] memory);
 
     /**
      * @notice Used to get the upper bound
      * @return Upper bound
      */
-    function getUpperSTVersionBounds() external view returns(uint8[] memory);
+    function upperSTVersionBounds() external view returns(uint8[] memory);
 
 }

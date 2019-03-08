@@ -7,7 +7,7 @@ import { catchRevert } from "./helpers/exceptions";
 import { setUpPolymathNetwork,
          deployGPMAndVerifyed,
          deployCountTMAndVerifyed,
-         deployLockupVolumeRTMAndVerified,
+         deployLockUpTMAndVerified,
          deployPercentageTMAndVerified,
          deployManualApprovalTMAndVerifyed
 } from "./helpers/createInstances";
@@ -22,7 +22,7 @@ const CountTransferManager = artifacts.require("./CountTransferManager");
 const ManualApprovalTransferManager = artifacts.require('./ManualApprovalTransferManager');
 const VolumeRestrictionTransferManager = artifacts.require('./LockUpTransferManager');
 const PercentageTransferManager = artifacts.require('./PercentageTransferManager');
-
+const STGetter = artifacts.require("./STGetter.sol");
 
 
 const Web3 = require('web3');
@@ -68,6 +68,8 @@ contract('GeneralPermissionManager', accounts => {
     let I_STRProxied;
     let I_PolyToken;
     let I_PolymathRegistry;
+    let I_STGetter;
+    let stGetter;
 
 
     //Define all modules for test
@@ -91,14 +93,14 @@ contract('GeneralPermissionManager', accounts => {
     const contact = "team@polymath.network";
     const delegateDetails = "Hello I am legit delegate";
     const STVRParameters = ["bool", "uint256", "bool"];
-
+    const address_zero = "0x0000000000000000000000000000000000000000";
     // Module key
     const delegateManagerKey = 1;
     const transferManagerKey = 2;
     const stoKey = 3;
 
     // Initial fee for ticker registry and security token registry
-    const initRegFee = web3.utils.toWei("250");
+    const initRegFee = web3.utils.toWei("1000");
 
 	let _details = "details holding for test";
     let testRepeat = 20;
@@ -145,7 +147,8 @@ contract('GeneralPermissionManager', accounts => {
             I_STFactory,
             I_SecurityTokenRegistry,
             I_SecurityTokenRegistryProxy,
-            I_STRProxied
+            I_STRProxied,
+            I_STGetter
         ] = instances;
 
         // STEP 5: Deploy the GeneralDelegateManagerFactory
@@ -158,7 +161,7 @@ contract('GeneralPermissionManager', accounts => {
 	    // Deploy Modules
         [I_CountTransferManagerFactory] = await deployCountTMAndVerifyed(account_polymath, I_MRProxied, 0);
         [I_ManualApprovalTransferManagerFactory] = await deployManualApprovalTMAndVerifyed(account_polymath, I_MRProxied, 0);
-        [I_VolumeRestrictionTransferManagerFactory] = await deployLockupVolumeRTMAndVerified(account_polymath, I_MRProxied, 0);
+        [I_VolumeRestrictionTransferManagerFactory] = await deployLockUpTMAndVerified(account_polymath, I_MRProxied, 0);
         [I_PercentageTransferManagerFactory] = await deployPercentageTMAndVerified(account_polymath, I_MRProxied, 0);
 
         // Printing all the contract addresses
@@ -189,13 +192,14 @@ contract('GeneralPermissionManager', accounts => {
         it("Should generate the new security token with the same symbol as registered above", async () => {
             await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
             let _blockNo = latestBlock();
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, { from: token_owner });
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, token_owner, 0, { from: token_owner });
 
             // Verify the successful generation of the security token
             assert.equal(tx.logs[2].args._ticker, symbol.toUpperCase(), "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), token_owner, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -204,25 +208,25 @@ contract('GeneralPermissionManager', accounts => {
         });
 
         it("Should intialize the auto attached modules", async () => {
-            let moduleData = (await I_SecurityToken.getModulesByType(2))[0];
+            let moduleData = (await stGetter.getModulesByType(2))[0];
             I_GeneralTransferManager = await GeneralTransferManager.at(moduleData);
         });
 
         it("Should successfully attach the General permission manager factory with the security token -- failed because Token is not paid", async () => {
             let errorThrown = false;
-            await I_PolyToken.getTokens(web3.utils.toWei("500", "ether"), token_owner);
+            await I_PolyToken.getTokens(web3.utils.toWei("2000", "ether"), token_owner);
             await catchRevert(
-                I_SecurityToken.addModule(P_GeneralPermissionManagerFactory.address, "0x0", web3.utils.toWei("500", "ether"), 0, { from: token_owner })
+                I_SecurityToken.addModule(P_GeneralPermissionManagerFactory.address, "0x0", web3.utils.toWei("2000", "ether"), 0, { from: token_owner })
             );
         });
 
         it("Should successfully attach the General permission manager factory with the security token", async () => {
             let snapId = await takeSnapshot();
-            await I_PolyToken.transfer(I_SecurityToken.address, web3.utils.toWei("500", "ether"), { from: token_owner });
+            await I_PolyToken.transfer(I_SecurityToken.address, web3.utils.toWei("2000", "ether"), { from: token_owner });
             const tx = await I_SecurityToken.addModule(
                 P_GeneralPermissionManagerFactory.address,
                 "0x0",
-                web3.utils.toWei("500", "ether"),
+                web3.utils.toWei("2000", "ether"),
                 0,
                 { from: token_owner }
             );

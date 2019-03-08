@@ -15,6 +15,7 @@ const DummySTO = artifacts.require("./DummySTO.sol");
 const PreSaleSTO = artifacts.require("./PreSaleSTO.sol");
 const SecurityToken = artifacts.require("./SecurityToken.sol");
 const GeneralTransferManager = artifacts.require("./GeneralTransferManager");
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require("web3");
 let BN = Web3.utils.BN;
@@ -45,6 +46,8 @@ contract("Concurrent STO", async (accounts) => {
     let I_PolyToken;
     let I_PolymathRegistry;
     let I_STRGetter;
+    let I_STGetter;
+    let stGetter;
 
     // STO instance declaration
     let I_CappedSTOFactory;
@@ -56,8 +59,9 @@ contract("Concurrent STO", async (accounts) => {
     let message = "Transaction Should Fail!";
 
     // Initial fees
-    const initRegFee = new BN(web3.utils.toWei("250"));
+    const initRegFee = new BN(web3.utils.toWei("1000"));
     const STOSetupCost = web3.utils.toHex(200 * Math.pow(10, 18));
+    const STOSetupCostPOLY = web3.utils.toHex(800 * Math.pow(10, 18));
 
     // Module keys
     const transferManagerKey = 2;
@@ -97,7 +101,8 @@ contract("Concurrent STO", async (accounts) => {
            I_SecurityTokenRegistry,
            I_SecurityTokenRegistryProxy,
            I_STRProxied,
-           I_STRGetter
+           I_STRGetter,
+           I_STGetter
        ] = instances;
 
         // STEP 2: Deploy the STO Factories
@@ -142,12 +147,13 @@ contract("Concurrent STO", async (accounts) => {
         it("Should generate the new security token with the same symbol as registered above", async () => {
             await I_PolyToken.getTokens(initRegFee, account_issuer);
             await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: account_issuer });
-            
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, { from: account_issuer });
+
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, account_issuer, 0, { from: account_issuer });
             assert.equal(tx.logs[2].args._ticker, symbol, "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), account_issuer, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -156,7 +162,7 @@ contract("Concurrent STO", async (accounts) => {
         });
 
         it("Should intialize the auto attached modules", async () => {
-            let moduleData = (await I_SecurityToken.getModulesByType(transferManagerKey))[0];
+            let moduleData = (await stGetter.getModulesByType(transferManagerKey))[0];
             I_GeneralTransferManager = await GeneralTransferManager.at(moduleData);
         });
 
@@ -166,7 +172,7 @@ contract("Concurrent STO", async (accounts) => {
             let expiryTime = toTime + duration.days(100);
             let canBuyFromSTO = true;
 
-            let tx = await I_GeneralTransferManager.modifyWhitelist(account_investor1, fromTime, toTime, expiryTime, canBuyFromSTO, {
+            let tx = await I_GeneralTransferManager.modifyKYCData(account_investor1, fromTime, toTime, expiryTime, {
                 from: account_issuer,
                 gas: 500000
             });
@@ -184,7 +190,7 @@ contract("Concurrent STO", async (accounts) => {
             const rate = new BN(web3.utils.toWei("1000"));
             const fundRaiseType = [0];
             const budget = 0;
-            const maxCost = STOSetupCost;
+            const maxCost = STOSetupCostPOLY;
             const cappedBytesSig = encodeModuleCall(CappedSTOParameters, [
                 startTime,
                 endTime,
@@ -197,8 +203,8 @@ contract("Concurrent STO", async (accounts) => {
             const presaleBytesSig = encodeModuleCall(PresaleSTOParameters, [endTime]);
 
             for (var STOIndex = 0; STOIndex < MAX_MODULES; STOIndex++) {
-                await I_PolyToken.getTokens(STOSetupCost, account_issuer);
-                await I_PolyToken.transfer(I_SecurityToken.address, STOSetupCost, { from: account_issuer });
+                await I_PolyToken.getTokens(STOSetupCostPOLY, account_issuer);
+                await I_PolyToken.transfer(I_SecurityToken.address, STOSetupCostPOLY, { from: account_issuer });
                 switch (STOIndex % 3) {
                     case 0:
                         // Capped STO

@@ -1,6 +1,6 @@
 import latestTime from "./helpers/latestTime";
 import { duration, promisifyLogWatch, latestBlock } from "./helpers/utils";
-import takeSnapshot, { increaseTime, revertToSnapshot } from "./helpers/time";
+import { takeSnapshot, increaseTime, revertToSnapshot } from "./helpers/time";
 import { getSignSTMData } from "./helpers/signData";
 import { pk } from "./helpers/testprivateKey";
 import { encodeProxyCall, encodeModuleCall } from "./helpers/encodeCall";
@@ -12,9 +12,9 @@ const SecurityToken = artifacts.require("./SecurityToken.sol");
 const GeneralTransferManager = artifacts.require("./GeneralTransferManager");
 const GeneralPermissionManager = artifacts.require("./GeneralPermissionManager");
 const SignedTransferManager = artifacts.require("./SignedTransferManager");
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require("web3");
-const BigNumber = require("bignumber.js");
 let BN = Web3.utils.BN;
 const web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545")); // Hardcoded development port
 
@@ -50,6 +50,8 @@ contract("SignedTransferManager", accounts => {
     let I_SignedTransferManagerFactory;
     let P_SignedTransferManagerFactory;
     let I_SignedTransferManager;
+    let I_STGetter;
+    let stGetter;
 
     // SecurityToken Details
     const name = "Team";
@@ -57,6 +59,7 @@ contract("SignedTransferManager", accounts => {
     const tokenDetails = "This is equity type of issuance";
     const decimals = 18;
     const contact = "team@polymath.network";
+    const address_zero = "0x0000000000000000000000000000000000000000";
 
     // Module key
     const delegateManagerKey = 1;
@@ -64,9 +67,10 @@ contract("SignedTransferManager", accounts => {
     const stoKey = 3;
 
     // Initial fee for ticker registry and security token registry
-    const initRegFee = web3.utils.toWei("250");
+    const initRegFee = web3.utils.toWei("1000");
 
     let currentTime;
+    let validFrom = new BN(0);
 
     before(async () => {
         // Accounts setup
@@ -96,15 +100,16 @@ contract("SignedTransferManager", accounts => {
             I_STFactory,
             I_SecurityTokenRegistry,
             I_SecurityTokenRegistryProxy,
-            I_STRProxied
+            I_STRProxied,
+            I_STGetter
         ] = instances;
 
         // STEP 2: Deploy the GeneralPermissionManagerFactory
-        [I_GeneralPermissionManagerFactory] = await deployGPMAndVerifyed(account_polymath, I_MRProxied, I_PolyToken.address, 0);
+        [I_GeneralPermissionManagerFactory] = await deployGPMAndVerifyed(account_polymath, I_MRProxied, new BN(0));
         // STEP 3: Deploy the SignedTransferManagerFactory
-        [I_SignedTransferManagerFactory] = await deploySignedTMAndVerifyed(account_polymath, I_MRProxied, I_PolyToken.address, 0);
+        [I_SignedTransferManagerFactory] = await deploySignedTMAndVerifyed(account_polymath, I_MRProxied, new BN(0));
         // STEP 4: Deploy the Paid SignedTransferManagerFactory
-        [P_SignedTransferManagerFactory] = await deploySignedTMAndVerifyed(account_polymath, I_MRProxied, I_PolyToken.address, web3.utils.toWei("500", "ether"));
+        [P_SignedTransferManagerFactory] = await deploySignedTMAndVerifyed(account_polymath, I_MRProxied, web3.utils.toWei("500", "ether"));
 
         // Printing all the contract addresses
         console.log(`
@@ -134,13 +139,14 @@ contract("SignedTransferManager", accounts => {
         it("Should generate the new security token with the same symbol as registered above", async () => {
             await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
 
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, { from: token_owner });
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, token_owner, 0, { from: token_owner });
 
             // Verify the successful generation of the security token
             assert.equal(tx.logs[2].args._ticker, symbol.toUpperCase(), "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), token_owner, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -149,7 +155,7 @@ contract("SignedTransferManager", accounts => {
         });
 
         it("Should intialize the auto attached modules", async () => {
-            let moduleData = (await I_SecurityToken.getModulesByType(2))[0];
+            let moduleData = (await stGetter.getModulesByType(2))[0];
             I_GeneralTransferManager = await GeneralTransferManager.at(moduleData);
         });
     });
@@ -160,12 +166,11 @@ contract("SignedTransferManager", accounts => {
         it("Should Buy the tokens", async () => {
             // Add the Investor in to the whitelist
 
-            let tx = await I_GeneralTransferManager.modifyWhitelist(
+            let tx = await I_GeneralTransferManager.modifyKYCData(
                 account_investor1,
                 currentTime,
                 currentTime,
                 currentTime.add(new BN(duration.days(10))),
-                true,
                 {
                     from: account_issuer
                 }
@@ -181,14 +186,14 @@ contract("SignedTransferManager", accounts => {
             await increaseTime(5000);
 
             // Mint some tokens
-            await I_SecurityToken.mint(account_investor1, new BN(web3.utils.toWei("2", "ether")), { from: token_owner });
+            await I_SecurityToken.issue(account_investor1, new BN(web3.utils.toWei("2", "ether")), "0x0", { from: token_owner });
 
             assert.equal((await I_SecurityToken.balanceOf(account_investor1)).toString(), new BN(web3.utils.toWei("2", "ether")).toString());
         });
 
 
         it("Should successfully attach the SignedTransferManager with the security token", async () => {
-            const tx = await I_SecurityToken.addModule(I_SignedTransferManagerFactory.address, new BN(0),new BN(0),new BN(0), { from: token_owner });
+            const tx = await I_SecurityToken.addModule(I_SignedTransferManagerFactory.address, "0x0",new BN(0),new BN(0), { from: token_owner });
             assert.equal(tx.logs[2].args._types[0].toNumber(), transferManagerKey, "SignedTransferManager doesn't get deployed");
             assert.equal(
                 web3.utils.toUtf8(tx.logs[2].args._name),
@@ -202,18 +207,17 @@ contract("SignedTransferManager", accounts => {
             await catchRevert(I_SecurityToken.transfer(account_investor2, web3.utils.toWei("1", "ether"), { from: account_investor1 }));
         });
 
-        it("should successfully add multiple signers to signersList", async () => {
-            await I_SignedTransferManager.updateSigners([account_investor3, account_investor4, token_owner], [true, true, true], {from: token_owner});
-
-            assert.equal(await I_SignedTransferManager.checkSigner(account_investor3), true);
-            assert.equal(await I_SignedTransferManager.checkSigner(account_investor4), true);
-            assert.equal(await I_SignedTransferManager.checkSigner(token_owner), true);
+        it("Should successfully attach the permission manager factory with the security token", async () => {
+            console.log((await I_GeneralPermissionManagerFactory.setupCostInPoly.call()).toString());
+            const tx = await I_SecurityToken.addModule(I_GeneralPermissionManagerFactory.address, "0x0", new BN(0), new BN(0), { from: token_owner });
+            assert.equal(tx.logs[2].args._types[0].toNumber(), delegateManagerKey, "GeneralPermissionManager doesn't get deployed");
+            assert.equal(
+                web3.utils.toAscii(tx.logs[2].args._name).replace(/\u0000/g, ""),
+                "GeneralPermissionManager",
+                "GeneralPermissionManager module was not added"
+            );
+            I_GeneralPermissionManager = await GeneralPermissionManager.at(tx.logs[2].args._module);
         });
-
-        it("should fail to change signers stats without permission", async () => {
-            await catchRevert(I_SignedTransferManager.updateSigners([account_investor3], [false], {from: account_investor2}));
-        });
-
 
         it("should allow to invalidate siganture if sender is the signer and is in the signer list", async () => {
             let oneeth = new BN(web3.utils.toWei("1", "ether"));
@@ -222,13 +226,18 @@ contract("SignedTransferManager", accounts => {
             await web3.eth.personal.unlockAccount(signer.address, "", 6000);
             await web3.eth.sendTransaction({ from: token_owner, to: signer.address, value: oneeth });
 
-            await I_SignedTransferManager.updateSigners([signer.address], [true], {from: token_owner});
+            let log = await I_GeneralPermissionManager.addDelegate(signer.address, web3.utils.fromAscii("My details"), { from: token_owner });
+            assert.equal(log.logs[0].args._delegate, signer.address);
+            await I_GeneralPermissionManager.changePermission(signer.address, I_SignedTransferManager.address, web3.utils.fromAscii("OPERATOR"), true, {
+                from: token_owner
+            });
 
             let nonce = new BN(10);
             let expiry = new BN(currentTime.add(new BN(duration.days(100))));
             let data = await getSignSTMData(
                 I_SignedTransferManager.address,
                 nonce,
+                validFrom,
                 expiry,
                 account_investor1,
                 account_investor2,
@@ -243,13 +252,18 @@ contract("SignedTransferManager", accounts => {
 
         it("should allow transfer with valid sig", async () => {
             let signer = web3.eth.accounts.create();
-            await I_SignedTransferManager.updateSigners([signer.address], [true], {from: token_owner});
+            let log = await I_GeneralPermissionManager.addDelegate(signer.address, web3.utils.fromAscii("My details"), { from: token_owner });
+            assert.equal(log.logs[0].args._delegate, signer.address);
+            await I_GeneralPermissionManager.changePermission(signer.address, I_SignedTransferManager.address, web3.utils.fromAscii("OPERATOR"), true, {
+                from: token_owner
+            });
             let oneeth = new BN(web3.utils.toWei("1", "ether"));
             let nonce = new BN(10);
             let expiry = new BN(currentTime.add(new BN(duration.days(100))));
             let data = await getSignSTMData(
                 I_SignedTransferManager.address,
                 nonce,
+                validFrom,
                 expiry,
                 account_investor1,
                 account_investor2,
@@ -281,6 +295,7 @@ contract("SignedTransferManager", accounts => {
             let data = await getSignSTMData(
                 I_SignedTransferManager.address,
                 nonce,
+                validFrom,
                 expiry,
                 account_investor1,
                 account_investor2,

@@ -9,7 +9,7 @@ import { setUpPolymathNetwork, deployVRTMAndVerifyed } from "./helpers/createIns
 const SecurityToken = artifacts.require('./SecurityToken.sol');
 const GeneralTransferManager = artifacts.require('./GeneralTransferManager.sol');
 const VolumeRestrictionTM = artifacts.require('./VolumeRestrictionTM.sol');
-
+const STGetter = artifacts.require("./STGetter.sol");
 const Web3 = require('web3');
 const BN = Web3.utils.BN;
 const web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545")) // Hardcoded development port
@@ -54,6 +54,8 @@ contract('VolumeRestrictionTransferManager', accounts => {
     let I_STRProxied;
     let I_PolyToken;
     let I_PolymathRegistry;
+    let I_STGetter;
+    let stGetter;
 
     // SecurityToken Details
     const name = "Team";
@@ -62,6 +64,7 @@ contract('VolumeRestrictionTransferManager', accounts => {
     const decimals = 18;
     const contact = "team@polymath.network";
     const delegateDetails = "Hello I am legit delegate";
+    const address_zero = "0x0000000000000000000000000000000000000000";
 
     // Module key
     const delegateManagerKey = 1;
@@ -74,7 +77,7 @@ contract('VolumeRestrictionTransferManager', accounts => {
     let tempArrayGlobal = new Array();
 
     // Initial fee for ticker registry and security token registry
-    const initRegFee = web3.utils.toWei("250");
+    const initRegFee = web3.utils.toWei("1000");
 
     async function print(data, account) {
         console.log(`
@@ -141,7 +144,8 @@ contract('VolumeRestrictionTransferManager', accounts => {
             I_STFactory,
             I_SecurityTokenRegistry,
             I_SecurityTokenRegistryProxy,
-            I_STRProxied
+            I_STRProxied,
+            I_STGetter
         ] = instances;
 
         // STEP 5: Deploy the VolumeRestrictionTMFactory
@@ -177,14 +181,15 @@ contract('VolumeRestrictionTransferManager', accounts => {
         it("Should generate the new security token with the same symbol as registered above", async () => {
             await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
 
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, true, { from: token_owner });
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, true, token_owner, 0, { from: token_owner });
             console.log(tx.logs);
 
             // Verify the successful generation of the security token
             assert.equal(tx.logs[2].args._ticker, symbol.toUpperCase(), "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), token_owner, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -193,7 +198,7 @@ contract('VolumeRestrictionTransferManager', accounts => {
         });
 
         it("Should intialize the auto attached modules", async () => {
-            let moduleData = (await I_SecurityToken.getModulesByType(2))[0];
+            let moduleData = (await stGetter.getModulesByType(2))[0];
             I_GeneralTransferManager = await GeneralTransferManager.at(moduleData);
         });
     });
@@ -212,21 +217,20 @@ contract('VolumeRestrictionTransferManager', accounts => {
         it("Transfer some tokens to different account", async() => {
             // Add tokens in to the whitelist
             currentTime = new BN(await latestTime());
-            await I_GeneralTransferManager.modifyWhitelistMulti(
+            await I_GeneralTransferManager.modifyKYCDataMulti(
                     [account_investor1, account_investor2, account_investor3],
                     [currentTime, currentTime, currentTime],
                     [currentTime, currentTime, currentTime],
                     [currentTime.add(new BN(duration.days(60))), currentTime.add(new BN(duration.days(60))), currentTime.add(new BN(duration.days(60)))],
-                    [true, true, true],
                     {
                         from: token_owner
                     }
             );
 
             // Mint some tokens and transferred to whitelisted addresses
-            await I_SecurityToken.mint(account_investor1, web3.utils.toWei("100", "ether"), {from: token_owner});
-            await I_SecurityToken.mint(account_investor2, web3.utils.toWei("30", "ether"), {from: token_owner});
-            await I_SecurityToken.mint(account_investor3, web3.utils.toWei("30", "ether"), {from: token_owner});
+            await I_SecurityToken.issue(account_investor1, web3.utils.toWei("100", "ether"), "0x0", {from: token_owner});
+            await I_SecurityToken.issue(account_investor2, web3.utils.toWei("30", "ether"), "0x0", {from: token_owner});
+            await I_SecurityToken.issue(account_investor3, web3.utils.toWei("30", "ether"), "0x0", {from: token_owner});
 
         });
 

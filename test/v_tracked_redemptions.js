@@ -1,6 +1,6 @@
 import latestTime from "./helpers/latestTime";
 import {duration, promisifyLogWatch} from "./helpers/utils";
-import takeSnapshot, {increaseTime, revertToSnapshot} from "./helpers/time";
+import { takeSnapshot,increaseTime, revertToSnapshot} from "./helpers/time";
 import {catchRevert} from "./helpers/exceptions";
 import {deployRedemptionAndVerifyed, setUpPolymathNetwork} from "./helpers/createInstances";
 
@@ -8,6 +8,7 @@ const SecurityToken = artifacts.require("./SecurityToken.sol");
 const GeneralTransferManager = artifacts.require("./GeneralTransferManager");
 const TrackedRedemption = artifacts.require("./TrackedRedemption");
 const GeneralPermissionManager = artifacts.require("./GeneralPermissionManager");
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require("web3");
 let BN = Web3.utils.BN;
@@ -47,6 +48,8 @@ contract("TrackedRedemption", async (accounts) => {
     let I_PolymathRegistry;
     let P_TrackedRedemptionFactory;
     let I_STRGetter;
+    let I_STGetter;
+    let stGetter;
 
     // SecurityToken Details
     const name = "Team";
@@ -63,7 +66,7 @@ contract("TrackedRedemption", async (accounts) => {
     const burnKey = 5;
 
     // Initial fee for ticker registry and security token registry
-    const initRegFee = new BN(web3.utils.toWei("250"));
+    const initRegFee = new BN(web3.utils.toWei("1000"));
 
     let currentTime;
     const address_zero = "0x0000000000000000000000000000000000000000";
@@ -99,7 +102,8 @@ contract("TrackedRedemption", async (accounts) => {
            I_SecurityTokenRegistry,
            I_SecurityTokenRegistryProxy,
            I_STRProxied,
-           I_STRGetter
+           I_STRGetter,
+           I_STGetter
        ] = instances;
 
 
@@ -135,14 +139,15 @@ contract("TrackedRedemption", async (accounts) => {
 
         it("Should generate the new security token with the same symbol as registered above", async () => {
             await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
-            
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, { from: token_owner });
+
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, token_owner, 0, { from: token_owner });
 
             // Verify the successful generation of the security token
             assert.equal(tx.logs[2].args._ticker, symbol.toUpperCase(), "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), token_owner, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -151,14 +156,14 @@ contract("TrackedRedemption", async (accounts) => {
         });
 
         it("Should intialize the auto attached modules", async () => {
-            let moduleData = (await I_SecurityToken.getModulesByType(2))[0];
+            let moduleData = (await stGetter.getModulesByType(2))[0];
             I_GeneralTransferManager = await GeneralTransferManager.at(moduleData);
         });
 
         it("Should successfully attach the paid TrackedRedemption with the security token", async () => {
             let snapId = await takeSnapshot();
-            await I_PolyToken.getTokens(new BN(web3.utils.toWei("500")), I_SecurityToken.address);
-            const tx = await I_SecurityToken.addModule(P_TrackedRedemptionFactory.address, "0x0", new BN(web3.utils.toWei("500")), new BN(0), {
+            await I_PolyToken.getTokens(new BN(web3.utils.toWei("2000")), I_SecurityToken.address);
+            const tx = await I_SecurityToken.addModule(P_TrackedRedemptionFactory.address, "0x0", new BN(web3.utils.toWei("2000")), new BN(0), {
                 from: token_owner
             });
             assert.equal(tx.logs[3].args._types[0].toNumber(), burnKey, "TrackedRedemption doesn't get deployed");
@@ -187,12 +192,11 @@ contract("TrackedRedemption", async (accounts) => {
         it("Buy some tokens for account_investor1 (1 ETH)", async () => {
             // Add the Investor in to the whitelist
 
-            let tx = await I_GeneralTransferManager.modifyWhitelist(
+            let tx = await I_GeneralTransferManager.modifyKYCData(
                 account_investor1,
                 currentTime,
                 currentTime,
                 currentTime.add(new BN(duration.days(30))),
-                true,
                 {
                     from: account_issuer,
                     gas: 500000
@@ -208,8 +212,8 @@ contract("TrackedRedemption", async (accounts) => {
             // Jump time
             await increaseTime(5000);
 
-            // Mint some tokens
-            await I_SecurityToken.mint(account_investor1, new BN(web3.utils.toWei("1", "ether")), { from: token_owner });
+            // issue some tokens
+            await I_SecurityToken.issue(account_investor1, new BN(web3.utils.toWei("1", "ether")), "0x0", { from: token_owner });
 
             assert.equal((await I_SecurityToken.balanceOf(account_investor1)).toString(), new BN(web3.utils.toWei("1", "ether")).toString());
         });
@@ -217,12 +221,11 @@ contract("TrackedRedemption", async (accounts) => {
         it("Buy some tokens for account_investor2 (2 ETH)", async () => {
             // Add the Investor in to the whitelist
 
-            let tx = await I_GeneralTransferManager.modifyWhitelist(
+            let tx = await I_GeneralTransferManager.modifyKYCData(
                 account_investor2,
                 currentTime,
                 currentTime,
                 currentTime.add(new BN(duration.days(30))),
-                true,
                 {
                     from: account_issuer,
                     gas: 500000
@@ -235,14 +238,21 @@ contract("TrackedRedemption", async (accounts) => {
                 "Failed in adding the investor in whitelist"
             );
 
-            // Mint some tokens
-            await I_SecurityToken.mint(account_investor2, new BN(web3.utils.toWei("2", "ether")), { from: token_owner });
+            // issue some tokens
+            await I_SecurityToken.issue(account_investor2, new BN(web3.utils.toWei("2", "ether")), "0x0", { from: token_owner });
 
             assert.equal((await I_SecurityToken.balanceOf(account_investor2)).toString(), new BN(web3.utils.toWei("2", "ether")).toString());
         });
 
         it("Redeem some tokens - fail insufficient allowance", async () => {
-            await I_GeneralTransferManager.changeAllowAllBurnTransfers(true, { from: token_owner });
+            await I_GeneralTransferManager.modifyTransferRequirementsMulti(
+                [0, 1, 2], 
+                [true, false, false],
+                [true, true, false],
+                [false, false, false],
+                [false, false, false],
+                { from: token_owner }
+            );
 
             await catchRevert(I_TrackedRedemption.redeemTokens(new BN(web3.utils.toWei("1", "ether")), { from: account_investor1 }));
         });
@@ -267,22 +277,17 @@ contract("TrackedRedemption", async (accounts) => {
 
         describe("Test cases for the TrackedRedemptionFactory", async () => {
             it("should get the exact details of the factory", async () => {
-                assert.equal((await I_TrackedRedemptionFactory.getSetupCost.call()).toNumber(), 0);
-                assert.equal((await I_TrackedRedemptionFactory.getTypes.call())[0], 5);
-                assert.equal(await I_TrackedRedemptionFactory.version.call(), "1.0.0");
+                assert.equal((await I_TrackedRedemptionFactory.setupCost.call()).toNumber(), 0);
+                assert.equal((await I_TrackedRedemptionFactory.types.call())[0], 5);
+                assert.equal(await I_TrackedRedemptionFactory.version.call(), "3.0.0");
                 assert.equal(
-                    web3.utils.toAscii(await I_TrackedRedemptionFactory.getName.call()).replace(/\u0000/g, ""),
+                    web3.utils.toAscii(await I_TrackedRedemptionFactory.name.call()).replace(/\u0000/g, ""),
                     "TrackedRedemption",
                     "Wrong Module added"
                 );
                 assert.equal(await I_TrackedRedemptionFactory.description.call(), "Track token redemptions", "Wrong Module added");
                 assert.equal(await I_TrackedRedemptionFactory.title.call(), "Tracked Redemption", "Wrong Module added");
-                assert.equal(
-                    await I_TrackedRedemptionFactory.getInstructions.call(),
-                    "Allows an investor to redeem security tokens which are tracked by this module",
-                    "Wrong Module added"
-                );
-                let tags = await I_TrackedRedemptionFactory.getTags.call();
+                let tags = await I_TrackedRedemptionFactory.tags.call();
                 assert.equal(tags.length, 2);
             });
         });

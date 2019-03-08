@@ -8,7 +8,7 @@ import {
     setUpPolymathNetwork,
     deployGPMAndVerifyed,
     deployCountTMAndVerifyed,
-    deployLockupVolumeRTMAndVerified,
+    deployLockUpTMAndVerified,
     deployPercentageTMAndVerified,
     deployManualApprovalTMAndVerifyed
 } from "./helpers/createInstances";
@@ -21,6 +21,7 @@ const CountTransferManager = artifacts.require("./CountTransferManager");
 const VolumeRestrictionTransferManager = artifacts.require("./VolumeRestrictionTM");
 const PercentageTransferManager = artifacts.require("./PercentageTransferManager");
 const ManualApprovalTransferManager = artifacts.require("./ManualApprovalTransferManager");
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require("web3");
 let BN = Web3.utils.BN;
@@ -74,6 +75,8 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
     let I_ManualApprovalTransferManagerFactory;
     let I_ManualApprovalTransferManager;
     let I_STRGetter;
+    let I_STGetter;
+    let stGetter;
 
     // SecurityToken Details
     const name = "Team";
@@ -90,7 +93,7 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
     const stoKey = 3;
 
     // Initial fee for ticker registry and security token registry
-    const initRegFee = new BN(web3.utils.toWei("250"));
+    const initRegFee = new BN(web3.utils.toWei("1000"));
 
     // CountTransferManager details
     const holderCount = 2; // Maximum number of token holders
@@ -138,7 +141,8 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
             I_SecurityTokenRegistry,
             I_SecurityTokenRegistryProxy,
             I_STRProxied,
-            I_STRGetter
+            I_STRGetter,
+            I_STGetter
         ] = instances;
 
         // STEP 5: Deploy the GeneralDelegateManagerFactory
@@ -149,7 +153,7 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
         // Deploy Modules
         [I_CountTransferManagerFactory] = await deployCountTMAndVerifyed(account_polymath, I_MRProxied, 0);
 
-        [I_VolumeRestrictionTransferManagerFactory] = await deployLockupVolumeRTMAndVerified(account_polymath, I_MRProxied, 0);
+        [I_VolumeRestrictionTransferManagerFactory] = await deployLockUpTMAndVerified(account_polymath, I_MRProxied, 0);
 
         [I_PercentageTransferManagerFactory] = await deployPercentageTMAndVerified(account_polymath, I_MRProxied, 0);
 
@@ -183,13 +187,14 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
         it("Should generate the new security token with the same symbol as registered above", async () => {
             await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
 
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, { from: token_owner });
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, token_owner, 0, { from: token_owner });
 
             // Verify the successful generation of the security token
             assert.equal(tx.logs[2].args._ticker, symbol.toUpperCase(), "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), token_owner, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -198,15 +203,15 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
         });
 
         it("Should intialize the auto attached modules", async () => {
-            let moduleData = (await I_SecurityToken.getModulesByType(2))[0];
+            let moduleData = (await stGetter.getModulesByType(2))[0];
             I_GeneralTransferManager = await GeneralTransferManager.at(moduleData);
         });
 
         it("Should successfully attach the General permission manager factory with the security token -- failed because Token is not paid", async () => {
             let errorThrown = false;
-            await I_PolyToken.getTokens(new BN(web3.utils.toWei("500", "ether")), token_owner);
+            await I_PolyToken.getTokens(new BN(web3.utils.toWei("2000", "ether")), token_owner);
             await catchRevert(
-                I_SecurityToken.addModule(P_GeneralPermissionManagerFactory.address, "0x", new BN(web3.utils.toWei("500", "ether")), new BN(0), {
+                I_SecurityToken.addModule(P_GeneralPermissionManagerFactory.address, "0x", new BN(web3.utils.toWei("2000", "ether")), new BN(0), {
                     from: token_owner
                 })
             );
@@ -214,11 +219,11 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
 
         it("Should successfully attach the General permission manager factory with the security token - paid module", async () => {
             let snapId = await takeSnapshot();
-            await I_PolyToken.transfer(I_SecurityToken.address, new BN(web3.utils.toWei("500", "ether")), { from: token_owner });
+            await I_PolyToken.transfer(I_SecurityToken.address, new BN(web3.utils.toWei("2000", "ether")), { from: token_owner });
             const tx = await I_SecurityToken.addModule(
                 P_GeneralPermissionManagerFactory.address,
                 "0x",
-                new BN(web3.utils.toWei("500", "ether")),
+                new BN(web3.utils.toWei("2000", "ether")),
                 new BN(0),
                 { from: token_owner }
             );
@@ -245,7 +250,7 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
     });
 
     describe("fuzz test for general transfer manager", async () => {
-        it("should pass fuzz test for changeIssuanceAddress(), changeSigningAddress() ", async () => {
+        it("should pass fuzz test for changeIssuanceAddress() ", async () => {
             console.log("1");
             // fuzz test loop over total times of testRepeat, inside each loop, we use a variable j to randomly choose an account out of the 10 default accounts
             for (var i = 2; i < testRepeat; i++) {
@@ -260,14 +265,14 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                 }
 
                 // target permission should alaways be false for each test before assigning
-                if ((await I_GeneralPermissionManager.checkPermission(accounts[j], I_GeneralTransferManager.address, web3.utils.fromAscii("FLAGS"))) === true) {
-                    await I_GeneralPermissionManager.changePermission(accounts[j], I_GeneralTransferManager.address, web3.utils.fromAscii("FLAGS"), false, {
+                if ((await I_GeneralPermissionManager.checkPermission(accounts[j], I_GeneralTransferManager.address, web3.utils.fromAscii("ADMIN"))) === true) {
+                    await I_GeneralPermissionManager.changePermission(accounts[j], I_GeneralTransferManager.address, web3.utils.fromAscii("ADMIN"), false, {
                         from: token_owner
                     });
                 } else if (
-                    (await I_GeneralPermissionManager.checkPermission(accounts[j], I_GeneralTransferManager.address, web3.utils.fromAscii("WHITELIST"))) === true
+                    (await I_GeneralPermissionManager.checkPermission(accounts[j], I_GeneralTransferManager.address, web3.utils.fromAscii("ADMIN"))) === true
                 ) {
-                    await I_GeneralPermissionManager.changePermission(accounts[j], I_GeneralTransferManager.address, web3.utils.fromAscii("WHITELIST"), false, {
+                    await I_GeneralPermissionManager.changePermission(accounts[j], I_GeneralTransferManager.address, web3.utils.fromAscii("ADMIN"), false, {
                         from: token_owner
                     });
                 }
@@ -282,35 +287,12 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                     from: token_owner
                 });
 
-                let currentAllowAllTransferStats = await I_GeneralTransferManager.allowAllTransfers();
-                let currentAllowAllWhitelistTransfersStats = await I_GeneralTransferManager.allowAllWhitelistTransfers();
-                let currentAllowAllWhitelistIssuancesStats = await I_GeneralTransferManager.allowAllWhitelistIssuances();
-                let currentAllowAllBurnTransfersStats = await I_GeneralTransferManager.allowAllBurnTransfers();
                 console.log("2");
                 // let userPerm = await I_GeneralPermissionManager.checkPermission(accounts[j], I_GeneralTransferManager.address, 'FLAGS');
-                if (randomPerms === "FLAGS") {
+                if (randomPerms === "ADMIN") {
                     console.log("Test number " + i + " with account " + j + " and perm " + randomPerms + " about to start");
                     await I_GeneralTransferManager.changeIssuanceAddress(accounts[j], { from: accounts[j] });
                     assert.equal(await I_GeneralTransferManager.issuanceAddress(), accounts[j]);
-
-                    await I_GeneralTransferManager.changeSigningAddress(accounts[j], { from: accounts[j] });
-                    assert.equal(await I_GeneralTransferManager.signingAddress(), accounts[j]);
-
-                    await I_GeneralTransferManager.changeAllowAllTransfers(!currentAllowAllTransferStats, { from: accounts[j] });
-                    assert.equal(await I_GeneralTransferManager.allowAllTransfers(), !currentAllowAllTransferStats);
-
-                    await I_GeneralTransferManager.changeAllowAllWhitelistTransfers(!currentAllowAllWhitelistTransfersStats, {
-                        from: accounts[j]
-                    });
-                    assert.equal(await I_GeneralTransferManager.allowAllWhitelistTransfers(), !currentAllowAllWhitelistTransfersStats);
-
-                    await I_GeneralTransferManager.changeAllowAllWhitelistIssuances(!currentAllowAllWhitelistIssuancesStats, {
-                        from: accounts[j]
-                    });
-                    assert.equal(await I_GeneralTransferManager.allowAllWhitelistIssuances(), !currentAllowAllWhitelistIssuancesStats);
-
-                    await I_GeneralTransferManager.changeAllowAllBurnTransfers(!currentAllowAllBurnTransfersStats, { from: accounts[j] });
-                    assert.equal(await I_GeneralTransferManager.allowAllBurnTransfers(), !currentAllowAllBurnTransfersStats);
 
                     console.log(
                         "Test number " +
@@ -323,23 +305,6 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                     );
                 } else {
                     await catchRevert(I_GeneralTransferManager.changeIssuanceAddress(accounts[j], { from: accounts[j] }));
-                    await catchRevert(I_GeneralTransferManager.changeSigningAddress(accounts[j], { from: accounts[j] }));
-                    await catchRevert(
-                        I_GeneralTransferManager.changeAllowAllTransfers(!currentAllowAllTransferStats, { from: accounts[j] })
-                    );
-                    await catchRevert(
-                        I_GeneralTransferManager.changeAllowAllWhitelistTransfers(!currentAllowAllWhitelistTransfersStats, {
-                            from: accounts[j]
-                        })
-                    );
-                    await catchRevert(
-                        I_GeneralTransferManager.changeAllowAllWhitelistIssuances(!currentAllowAllWhitelistIssuancesStats, {
-                            from: accounts[j]
-                        })
-                    );
-                    await catchRevert(
-                        I_GeneralTransferManager.changeAllowAllBurnTransfers(!currentAllowAllBurnTransfersStats, { from: accounts[j] })
-                    );
                     console.log(
                         "Test number " +
                             i +
@@ -352,18 +317,17 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                 }
 
                 console.log("3");
-                if (randomPerms === "WHITELIST") {
-                    let tx = await I_GeneralTransferManager.modifyWhitelist(accounts[j], fromTime, toTime, expiryTime, 1, {
+                if (randomPerms === "ADMIN") {
+                    let tx = await I_GeneralTransferManager.modifyKYCData(accounts[j], fromTime, toTime, expiryTime, {
                         from: accounts[j]
                     });
                     assert.equal(tx.logs[0].args._investor, accounts[j]);
                     console.log("3.1");
-                    let tx2 = await I_GeneralTransferManager.modifyWhitelistMulti(
+                    let tx2 = await I_GeneralTransferManager.modifyKYCDataMulti(
                         [accounts[3], accounts[4]],
                         [fromTime, fromTime],
                         [toTime, toTime],
                         [expiryTime, expiryTime],
-                        [1, 1],
                         { from: accounts[j] }
                     );
                     console.log(tx2.logs[1].args);
@@ -372,16 +336,15 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                 } else {
                     console.log("3.3");
                     await catchRevert(
-                        I_GeneralTransferManager.modifyWhitelist(accounts[j], fromTime, toTime, expiryTime, 1, { from: accounts[j] })
+                        I_GeneralTransferManager.modifyKYCData(accounts[j], fromTime, toTime, expiryTime, { from: accounts[j] })
                     );
                     console.log("3.4");
                     await catchRevert(
-                        I_GeneralTransferManager.modifyWhitelistMulti(
+                        I_GeneralTransferManager.modifyKYCDataMulti(
                             [accounts[3], accounts[4]],
                             [fromTime, fromTime],
                             [toTime, toTime],
                             [expiryTime, expiryTime],
-                            [1, 1],
                             { from: accounts[j] }
                         )
                     );
@@ -472,7 +435,7 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
             I_PercentageTransferManager = await PercentageTransferManager.at(tx.logs[2].args._module);
         });
 
-        it("should pass fuzz test for modifyWhitelist with perm WHITELIST", async () => {
+        it("should pass fuzz test for modifyWhitelist with perm ADMIN", async () => {
             // fuzz test loop over total times of testRepeat, inside each loop, we use a variable j to randomly choose an account out of the 10 default accounts
             for (var i = 2; i < testRepeat; i++) {
                 var j = Math.floor(Math.random() * 10);
@@ -487,13 +450,13 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
 
                 // target permission should alaways be false for each test before assigning
                 if (
-                    (await I_GeneralPermissionManager.checkPermission(accounts[j], I_PercentageTransferManager.address, web3.utils.fromAscii("WHITELIST"))) ===
+                    (await I_GeneralPermissionManager.checkPermission(accounts[j], I_PercentageTransferManager.address, web3.utils.fromAscii("ADMIN"))) ===
                     true
                 ) {
                     await I_GeneralPermissionManager.changePermission(
                         accounts[j],
                         I_PercentageTransferManager.address,
-                        web3.utils.fromAscii("WHITELIST"),
+                        web3.utils.fromAscii("ADMIN"),
                         false,
                         { from: token_owner }
                     );
@@ -506,10 +469,10 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                 });
 
                 //try add multi lock ups
-                if (randomPerms === "WHITELIST") {
+                if (randomPerms === "ADMIN") {
                     // console.log("Test number " + i + " with account " + j + " and perm " + randomPerms + " should pass");
                     await I_PercentageTransferManager.modifyWhitelist(account_investor3, 1, { from: accounts[j] });
-                    console.log("Test number " + i + " with account " + j + " and perm WHITELIST passed as expected");
+                    console.log("Test number " + i + " with account " + j + " and perm ADMIN passed as expected");
                 } else {
                     // console.log("Test number " + i + " with account " + j + " and perm " + randomPerms + " should failed");
                     await catchRevert(I_PercentageTransferManager.modifyWhitelist(account_investor3, 1, { from: accounts[j] }));
@@ -518,7 +481,7 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
             }
         });
 
-        it("should pass fuzz test for modifyWhitelistMulti with perm WHITELIST", async () => {
+        it("should pass fuzz test for modifyWhitelistMulti with perm ADMIN", async () => {
             // fuzz test loop over total times of testRepeat, inside each loop, we use a variable j to randomly choose an account out of the 10 default accounts
             for (var i = 2; i < testRepeat; i++) {
                 var j = Math.floor(Math.random() * 10);
@@ -533,13 +496,13 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
 
                 // target permission should alaways be false for each test before assigning
                 if (
-                    (await I_GeneralPermissionManager.checkPermission(accounts[j], I_PercentageTransferManager.address, web3.utils.fromAscii("WHITELIST"))) ===
+                    (await I_GeneralPermissionManager.checkPermission(accounts[j], I_PercentageTransferManager.address, web3.utils.fromAscii("ADMIN"))) ===
                     true
                 ) {
                     await I_GeneralPermissionManager.changePermission(
                         accounts[j],
                         I_PercentageTransferManager.address,
-                        web3.utils.fromAscii("WHITELIST"),
+                        web3.utils.fromAscii("ADMIN"),
                         false,
                         { from: token_owner }
                     );
@@ -551,12 +514,12 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                     from: token_owner
                 });
 
-                if (randomPerms === "WHITELIST") {
+                if (randomPerms === "ADMIN") {
                     // console.log("Test number " + i + " with account " + j + " and perm " + randomPerms + " should pass");
                     await I_PercentageTransferManager.modifyWhitelistMulti([account_investor3, account_investor4], [0, 1], {
                         from: accounts[j]
                     });
-                    console.log("Test number " + i + " with account " + j + " and perm WHITELIST passed as expected");
+                    console.log("Test number " + i + " with account " + j + " and perm ADMIN passed as expected");
                 } else {
                     // console.log("Test number " + i + " with account " + j + " and perm " + randomPerms + " should failed");
                     await catchRevert(
@@ -626,7 +589,7 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
             I_ManualApprovalTransferManager = await ManualApprovalTransferManager.at(tx.logs[2].args._module);
         });
 
-        it("should pass fuzz test for addManualApproval & revokeManualApproval with perm TRANSFER_APPROVAL", async () => {
+        it("should pass fuzz test for addManualApproval & revokeManualApproval with perm ADMIN", async () => {
             let tx;
             // fuzz test loop over total times of testRepeat, inside each loop, we use a variable j to randomly choose an account out of the 10 default accounts
             for (var i = 2; i < testRepeat; i++) {
@@ -647,13 +610,13 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                     (await I_GeneralPermissionManager.checkPermission(
                         accounts[j],
                         I_ManualApprovalTransferManager.address,
-                        web3.utils.fromAscii("TRANSFER_APPROVAL")
+                        web3.utils.fromAscii("ADMIN")
                     )) === true
                 ) {
                     await I_GeneralPermissionManager.changePermission(
                         accounts[j],
                         I_ManualApprovalTransferManager.address,
-                        web3.utils.fromAscii("TRANSFER_APPROVAL"),
+                        web3.utils.fromAscii("ADMIN"),
                         false,
                         { from: token_owner }
                     );
@@ -665,8 +628,8 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                     from: token_owner
                 });
 
-                if (randomPerms === "TRANSFER_APPROVAL") {
-                    console.log("Test number " + i + " with account " + j + " and perm TRANSFER_APPROVAL " + " should pass");
+                if (randomPerms === "ADMIN") {
+                    console.log("Test number " + i + " with account " + j + " and perm ADMIN " + " should pass");
                     let nextTime = await latestTime() + duration.days(1);
                     await I_ManualApprovalTransferManager.addManualApproval(
                         account_investor1,
@@ -686,7 +649,7 @@ contract("GeneralPermissionManager Fuzz", async (accounts) => {
                     assert.equal(tx.logs[0].args._addedBy, accounts[j]);
 
                     console.log("3");
-                    console.log("Test number " + i + " with account " + j + " and perm TRANSFER_APPROVAL passed as expected");
+                    console.log("Test number " + i + " with account " + j + " and perm ADMIN passed as expected");
                 } else {
                     console.log("Test number " + i + " with account " + j + " and perm " + randomPerms + " should failed");
                     let nextTime = await latestTime() + duration.days(1);

@@ -17,6 +17,7 @@ const GeneralTransferManagerFactory = artifacts.require("./GeneralTransferManage
 const MockFactory = artifacts.require("./MockFactory.sol");
 const TestSTOFactory = artifacts.require("./TestSTOFactory.sol");
 const ReclaimTokens = artifacts.require("./ReclaimTokens.sol");
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require("web3");
 let BN = Web3.utils.BN;
@@ -64,6 +65,8 @@ contract("ModuleRegistry", async (accounts) => {
     let I_PolymathRegistry;
     let I_SecurityToken2;
     let I_STRGetter;
+    let I_STGetter;
+    let stGetter;
 
     // SecurityToken Details (Launched ST on the behalf of the issuer)
     const name = "Demo Token";
@@ -80,7 +83,7 @@ contract("ModuleRegistry", async (accounts) => {
     const one_address = "0x0000000000000000000000000000000000000001";
 
     // Initial fee for ticker registry and security token registry
-    const initRegFee = new BN(web3.utils.toWei("250"));
+    const initRegFee = new BN(web3.utils.toWei("1000"));
 
     // delagate details
     const delegateDetails = "I am delegate ..";
@@ -123,7 +126,8 @@ contract("ModuleRegistry", async (accounts) => {
            I_SecurityTokenRegistry,
            I_SecurityTokenRegistryProxy,
            I_STRProxied,
-           I_STRGetter
+           I_STRGetter,
+           I_STGetter
        ] = instances;
 
        I_ModuleRegistryProxy = await ModuleRegistryProxy.new({from: account_polymath});
@@ -253,19 +257,19 @@ contract("ModuleRegistry", async (accounts) => {
             });
 
             it("Should fail in registering the module-- type = 0", async () => {
-                I_MockFactory = await MockFactory.new(new BN(0), new BN(0), new BN(0), address_zero, { from: account_polymath });
+                I_MockFactory = await MockFactory.new(new BN(0), new BN(0), one_address, I_PolymathRegistry.address, { from: account_polymath });
 
                 catchRevert(I_MRProxied.registerModule(I_MockFactory.address, { from: account_polymath }));
             });
 
             it("Should fail to register the new module because msg.sender is not the owner of the module", async() => {
                 I_CappedSTOLogic = await CappedSTO.new(address_zero, address_zero, { from: account_polymath });
-                I_CappedSTOFactory3 = await CappedSTOFactory.new(new BN(0), new BN(0), new BN(0), I_CappedSTOLogic.address, { from: account_temp });
+                I_CappedSTOFactory3 = await CappedSTOFactory.new(new BN(0), new BN(0), I_CappedSTOLogic.address, I_PolymathRegistry.address, { from: account_temp });
                 catchRevert(I_MRProxied.registerModule(I_CappedSTOFactory3.address, { from: token_owner }));
             });
 
             it("Should successfully register the module -- fail because no module type uniqueness", async () => {
-                await I_MockFactory.changeTypes({ from: account_polymath });
+                await I_MockFactory.switchTypes({ from: account_polymath });
                 catchRevert(I_MRProxied.registerModule(I_MockFactory.address, { from: account_polymath }));
             });
         });
@@ -282,7 +286,7 @@ contract("ModuleRegistry", async (accounts) => {
             });
 
             it("Should successfully verify the module -- false", async () => {
-                I_CappedSTOFactory1 = await CappedSTOFactory.new(new BN(0), new BN(0), new BN(0), I_CappedSTOLogic.address, { from: account_polymath });
+                I_CappedSTOFactory1 = await CappedSTOFactory.new(new BN(0), new BN(0), I_CappedSTOLogic.address, I_PolymathRegistry.address, { from: account_polymath });
                 await I_MRProxied.registerModule(I_CappedSTOFactory1.address, { from: account_polymath });
                 let tx = await I_MRProxied.verifyModule(I_CappedSTOFactory1.address, false, { from: account_polymath });
                 assert.equal(tx.logs[0].args._moduleFactory, I_CappedSTOFactory1.address, "Failed in verifying the module");
@@ -296,12 +300,14 @@ contract("ModuleRegistry", async (accounts) => {
 
         describe("Test cases for the useModule function of the module registry", async () => {
             it("Deploy the securityToken", async () => {
-                await I_PolyToken.getTokens(new BN(web3.utils.toWei("500")), account_issuer);
-                await I_PolyToken.approve(I_STRProxied.address, new BN(web3.utils.toWei("500")), { from: account_issuer });
+                await I_PolyToken.getTokens(new BN(web3.utils.toWei("2000")), account_issuer);
+                await I_PolyToken.approve(I_STRProxied.address, new BN(web3.utils.toWei("2000")), { from: account_issuer });
                 await I_STRProxied.registerTicker(account_issuer, symbol, name, { from: account_issuer });
-                let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, true, { from: account_issuer });
+                let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, true, account_issuer, 0, { from: account_issuer });
                 assert.equal(tx.logs[2].args._ticker, symbol.toUpperCase());
                 I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
+                stGetter = await STGetter.at(I_SecurityToken.address);
+                assert.equal(await stGetter.getTreasuryWallet.call(), account_issuer, "Incorrect wallet set")
             });
 
             it("Should fail in adding module. Because module is un-verified", async () => {
@@ -313,7 +319,7 @@ contract("ModuleRegistry", async (accounts) => {
             });
 
             it("Should fail to register module because custom modules not allowed", async () => {
-                I_CappedSTOFactory2 = await CappedSTOFactory.new(0, new BN(0), new BN(0), I_CappedSTOLogic.address, { from: token_owner });
+                I_CappedSTOFactory2 = await CappedSTOFactory.new(new BN(0), new BN(0), I_CappedSTOLogic.address, I_PolymathRegistry.address, { from: token_owner });
 
                 assert.notEqual(I_CappedSTOFactory2.address.valueOf(), address_zero, "CappedSTOFactory contract was not deployed");
 
@@ -361,7 +367,7 @@ contract("ModuleRegistry", async (accounts) => {
 
             it("Should successfully add verified module", async () => {
                 I_GeneralPermissionManagerLogic = await GeneralPermissionManager.new("0x0000000000000000000000000000000000000000", "0x0000000000000000000000000000000000000000", { from: account_polymath });
-                I_GeneralPermissionManagerFactory = await GeneralPermissionManagerFactory.new(0, new BN(0), new BN(0), I_GeneralPermissionManagerLogic.address, {
+                I_GeneralPermissionManagerFactory = await GeneralPermissionManagerFactory.new(new BN(0), new BN(0), I_GeneralPermissionManagerLogic.address, I_PolymathRegistry.address, {
                     from: account_polymath
                 });
                 await I_MRProxied.registerModule(I_GeneralPermissionManagerFactory.address, { from: account_polymath });
@@ -371,13 +377,13 @@ contract("ModuleRegistry", async (accounts) => {
             });
 
             it("Should failed in adding the TestSTOFactory module because not compatible with the current protocol version --lower", async () => {
-                I_TestSTOFactory = await TestSTOFactory.new(new BN(0), new BN(0), new BN(0), address_zero, { from: account_polymath });
+                I_TestSTOFactory = await TestSTOFactory.new(new BN(0), new BN(0), one_address, I_PolymathRegistry.address, { from: account_polymath });
                 await I_MRProxied.registerModule(I_TestSTOFactory.address, { from: account_polymath });
                 await I_MRProxied.verifyModule(I_TestSTOFactory.address, true, { from: account_polymath });
                 // Taking the snapshot the revert the changes from here
                 let id = await takeSnapshot();
                 await I_TestSTOFactory.changeSTVersionBounds("lowerBound", [2, 1, 0], { from: account_polymath });
-                let _lstVersion = await I_TestSTOFactory.getLowerSTVersionBounds.call();
+                let _lstVersion = await I_TestSTOFactory.lowerSTVersionBounds.call();
                 assert.equal(_lstVersion[2], 0);
                 assert.equal(_lstVersion[1], 1);
                 let bytesData = encodeModuleCall(
@@ -391,20 +397,21 @@ contract("ModuleRegistry", async (accounts) => {
 
             it("Should failed in adding the TestSTOFactory module because not compatible with the current protocol version --upper", async () => {
                 await I_TestSTOFactory.changeSTVersionBounds("upperBound", [0, new BN(0), 1], { from: account_polymath });
-                let _ustVersion = await I_TestSTOFactory.getUpperSTVersionBounds.call();
+                let _ustVersion = await I_TestSTOFactory.upperSTVersionBounds.call();
                 assert.equal(_ustVersion[0], 0);
                 assert.equal(_ustVersion[2], 1);
                 await I_STRProxied.setProtocolVersion(I_STFactory.address, 2, new BN(0), 1);
 
                 // Generate the new securityToken
                 let newSymbol = "toro";
-                await I_PolyToken.getTokens(new BN(web3.utils.toWei("500")), account_issuer);
-                await I_PolyToken.approve(I_STRProxied.address, new BN(web3.utils.toWei("500")), { from: account_issuer });
+                await I_PolyToken.getTokens(new BN(web3.utils.toWei("2000")), account_issuer);
+                await I_PolyToken.approve(I_STRProxied.address, new BN(web3.utils.toWei("2000")), { from: account_issuer });
                 await I_STRProxied.registerTicker(account_issuer, newSymbol, name, { from: account_issuer });
-                let tx = await I_STRProxied.generateSecurityToken(name, newSymbol, tokenDetails, true, { from: account_issuer });
+                let tx = await I_STRProxied.generateSecurityToken(name, newSymbol, tokenDetails, true, account_issuer, 0, { from: account_issuer });
                 assert.equal(tx.logs[2].args._ticker, newSymbol.toUpperCase());
                 I_SecurityToken2 = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+                stGetter = await STGetter.at(I_SecurityToken2.address);
+                assert.equal(await stGetter.getTreasuryWallet.call(), account_issuer, "Incorrect wallet set")
                 let bytesData = encodeModuleCall(
                     ["uint256", "uint256", "uint256", "string"],
                     [await latestTime(), currentTime.add(new BN(duration.days(1))), cap, "Test STO"]

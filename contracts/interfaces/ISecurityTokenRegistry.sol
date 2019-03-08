@@ -4,14 +4,26 @@ pragma solidity ^0.5.0;
  * @title Interface for the Polymath Security Token Registry contract
  */
 interface ISecurityTokenRegistry {
+
     /**
-     * @notice Creates a new Security Token and saves it to the registry
-     * @param _name Name of the token
-     * @param _ticker Ticker ticker of the security token
-     * @param _tokenDetails Off-chain details of the token
-     * @param _divisible Whether the token is divisible or not
+     * @notice Deploys an instance of a new Security Token and records it to the registry
+     * @param _name is the name of the token
+     * @param _ticker is the ticker symbol of the security token
+     * @param _tokenDetails is the off-chain details of the token
+     * @param _divisible is whether or not the token is divisible
+     * @param _treasuryWallet Ethereum address which will holds the STs.
+     * @param _protocolVersion Version of securityToken contract
+     * - `_protocolVersion` is the packed value of uin8[3] array (it will be calculated offchain)
+     * - if _protocolVersion == 0 then latest version of securityToken will be generated
      */
-    function generateSecurityToken(string calldata _name, string calldata _ticker, string calldata _tokenDetails, bool _divisible) external;
+    function generateSecurityToken(
+        string calldata _name,
+        string calldata _ticker,
+        string calldata _tokenDetails,
+        bool _divisible,
+        address _treasuryWallet,
+        uint256 _protocolVersion
+    ) external;
 
     /**
      * @notice Adds a new custom Security Token and saves it to the registry. (Token should follow the ISecurityToken interface)
@@ -29,7 +41,7 @@ interface ISecurityTokenRegistry {
         address _securityToken,
         string calldata _tokenDetails,
         uint256 _deployedAt
-    ) 
+    )
     external;
 
     /**
@@ -79,9 +91,10 @@ interface ISecurityTokenRegistry {
      * @return string Symbol of the Security Token.
      * @return address Address of the issuer of Security Token.
      * @return string Details of the Token.
-     * @return uint256 Timestamp at which Security Token get launched on Polymath platform.
+     * @return uint256 Timestamp at which Security Token get launched on Polymath platform
+     * @return version of the securityToken
      */
-    function getSecurityTokenData(address _securityToken) external view returns(string memory, address, string memory, uint256);
+    function getSecurityTokenData(address _securityToken) external view returns(string memory, address, string memory, uint256, uint8[] memory);
 
     /**
      * @notice Get the current STFactory Address
@@ -140,7 +153,7 @@ interface ISecurityTokenRegistry {
         uint256 _registrationDate,
         uint256 _expiryDate,
         bool _status
-    ) 
+    )
     external;
 
     /**
@@ -185,6 +198,13 @@ interface ISecurityTokenRegistry {
      * @return Fee amount
      */
     function getTickerRegistrationFee() external view returns(uint256);
+
+    /**
+     * @notice Returns the list of tokens to which the delegate has some access
+     * @param _delegate is the address for the delegate
+     * @dev Intention is that this is called off-chain so block gas limit is not relevant
+     */
+    function getTokensByDelegate(address _delegate) external view returns(address[] memory);
 
     /**
      * @notice Gets the expiry limit

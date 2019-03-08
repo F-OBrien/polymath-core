@@ -8,7 +8,7 @@ import "../modules/Experimental/Burn/TrackedRedemption.sol";
 contract MockRedemptionManager is TrackedRedemption {
     mapping(address => uint256) tokenToRedeem;
 
-    event RedeemedTokenByOwner(address _investor, address _byWhoom, uint256 _value, uint256 _timestamp);
+    event RedeemedTokenByOwner(address _investor, address _byWhoom, uint256 _value);
 
     /**
      * @notice Constructor
@@ -35,9 +35,9 @@ contract MockRedemptionManager is TrackedRedemption {
         require(tokenToRedeem[msg.sender] >= _value, "Insufficient tokens redeemable");
         tokenToRedeem[msg.sender] = tokenToRedeem[msg.sender].sub(_value);
         redeemedTokens[msg.sender] = redeemedTokens[msg.sender].add(_value);
-        ISecurityToken(securityToken).burnWithData(_value, "");
+        ISecurityToken(securityToken).redeem(_value, "");
         /*solium-disable-next-line security/no-block-members*/
-        emit RedeemedTokenByOwner(msg.sender, address(this), _value, now);
+        emit RedeemedTokenByOwner(msg.sender, address(this), _value);
     }
 
 }

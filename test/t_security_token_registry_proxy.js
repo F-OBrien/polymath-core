@@ -10,6 +10,7 @@ const OwnedUpgradeabilityProxy = artifacts.require("./OwnedUpgradeabilityProxy.s
 const STFactory = artifacts.require("./STFactory.sol");
 const SecurityToken = artifacts.require("./SecurityToken.sol");
 const STRGetter = artifacts.require("./STRGetter.sol");
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require("web3");
 let BN = Web3.utils.BN;
@@ -31,6 +32,8 @@ contract("SecurityTokenRegistryProxy", async (accounts) => {
     let I_FeatureRegistry;
     let I_STRGetter;
     let I_Getter;
+    let I_STGetter;
+    let stGetter;
 
     let account_polymath;
     let account_temp;
@@ -39,6 +42,7 @@ contract("SecurityTokenRegistryProxy", async (accounts) => {
 
     // Initial fee for ticker registry and security token registry
     const initRegFee = new BN(web3.utils.toWei("250"));
+    const initRegFeePOLY = new BN(web3.utils.toWei("1000"));
     const version = "1.0.0";
     const message = "Transaction Should Fail!";
 
@@ -79,7 +83,8 @@ contract("SecurityTokenRegistryProxy", async (accounts) => {
             I_SecurityTokenRegistry,
             I_SecurityTokenRegistryProxy,
             I_STRProxied,
-            I_STRGetter
+            I_STRGetter,
+            I_STGetter
         ] = instances;
 
         I_SecurityTokenRegistryProxy = await SecurityTokenRegistryProxy.new({ from: account_polymath });
@@ -147,23 +152,24 @@ contract("SecurityTokenRegistryProxy", async (accounts) => {
 
     describe("Feed some data in storage", async () => {
         it("Register the ticker", async () => {
-            await I_PolyToken.getTokens(new BN(web3.utils.toWei("1000")), token_owner);
-            await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
+            await I_PolyToken.getTokens(new BN(web3.utils.toWei("8000")), token_owner);
+            await I_PolyToken.approve(I_STRProxied.address, initRegFeePOLY, { from: token_owner });
             let tx = await I_STRProxied.registerTicker(token_owner, symbol, name, { from: token_owner });
             assert.equal(tx.logs[0].args._owner, token_owner, "Owner should be the same as registered with the ticker");
             assert.equal(tx.logs[0].args._ticker, symbol, "Same as the symbol registered in the registerTicker function call");
         });
 
         it("Should generate the new security token with the same symbol as registered above", async () => {
-            await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
+            await I_PolyToken.approve(I_STRProxied.address, initRegFeePOLY, { from: token_owner });
 
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, { from: token_owner });
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, token_owner, 0, { from: token_owner });
 
             // Verify the successful generation of the security token
             assert.equal(tx.logs[2].args._ticker, symbol, "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), token_owner, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not

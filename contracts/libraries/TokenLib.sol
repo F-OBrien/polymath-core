@@ -1,71 +1,63 @@
 pragma solidity ^0.5.0;
 
-import "../modules/PermissionManager/IPermissionManager.sol";
-import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "../interfaces/IPoly.sol";
+import "../modules/UpgradableModuleFactory.sol";
+import "../interfaces/IDataStore.sol";
+import "../tokens/SecurityTokenStorage.sol";
+import "../interfaces/ITransferManager.sol";
+import "openzeppelin-solidity/contracts/math/SafeMath.sol";
+import "../modules/PermissionManager/IPermissionManager.sol";
 
 library TokenLib {
+
     using SafeMath for uint256;
 
-    // Struct for module data
-    struct ModuleData {
-        bytes32 name;
-        address module;
-        address moduleFactory;
-        bool isArchived;
-        uint8[] moduleTypes;
-        uint256[] moduleIndexes;
-        uint256 nameIndex;
-        bytes32 label;
-    }
+    bytes32 internal constant WHITELIST = "WHITELIST";
+    bytes32 internal constant INVESTORSKEY = 0xdf3a8dd24acdd05addfc6aeffef7574d2de3f844535ec91e8e0f3e45dba96731; //keccak256(abi.encodePacked("INVESTORS"))
 
-    // Structures to maintain checkpoints of balances for governance / dividends
-    struct Checkpoint {
-        uint256 checkpointId;
-        uint256 value;
-    }
-
-    struct InvestorDataStorage {
-        // List of investors who have ever held a non-zero token balance
-        mapping(address => bool) investorListed;
-        // List of token holders
-        address[] investors;
-        // Total number of non-zero token holders
-        uint256 investorCount;
-    }
-
+    // Emit when Module get upgraded from the securityToken
+    event ModuleUpgraded(uint8[] _types, address _module);
     // Emit when Module is archived from the SecurityToken
-    event ModuleArchived(uint8[] _types, address _module, uint256 _timestamp);
+    event ModuleArchived(uint8[] _types, address _module);
     // Emit when Module is unarchived from the SecurityToken
-    event ModuleUnarchived(uint8[] _types, address _module, uint256 _timestamp);
+    event ModuleUnarchived(uint8[] _types, address _module);
     // Emit when Module get removed from the securityToken
-    event ModuleRemoved(uint8[] _types, address _module, uint256 _timestamp);
+    event ModuleRemoved(uint8[] _types, address _module);
     // Emit when the budget allocated to a module is changed
     event ModuleBudgetChanged(uint8[] _moduleTypes, address _module, uint256 _oldBudget, uint256 _budget);
 
     /**
     * @notice Archives a module attached to the SecurityToken
     * @param _moduleData Storage data
-    * @param _module Address of module to archive
     */
-    function archiveModule(ModuleData storage _moduleData, address _module) public {
+    function archiveModule(SecurityTokenStorage.ModuleData storage _moduleData) public {
         require(!_moduleData.isArchived, "Module archived");
         require(_moduleData.module != address(0), "Module missing");
         /*solium-disable-next-line security/no-block-members*/
-        emit ModuleArchived(_moduleData.moduleTypes, _module, now);
+        emit ModuleArchived(_moduleData.moduleTypes, _moduleData.module);
         _moduleData.isArchived = true;
     }
 
     /**
     * @notice Unarchives a module attached to the SecurityToken
     * @param _moduleData Storage data
-    * @param _module Address of module to unarchive
     */
-    function unarchiveModule(ModuleData storage _moduleData, address _module) public {
+    function unarchiveModule(SecurityTokenStorage.ModuleData storage _moduleData) public {
         require(_moduleData.isArchived, "Module unarchived");
         /*solium-disable-next-line security/no-block-members*/
-        emit ModuleUnarchived(_moduleData.moduleTypes, _module, now);
+        emit ModuleUnarchived(_moduleData.moduleTypes, _moduleData.module);
         _moduleData.isArchived = false;
+    }
+
+    /**
+    * @notice Upgrades a module attached to the SecurityToken
+    * @param _moduleData Storage data
+    */
+    function upgradeModule(SecurityTokenStorage.ModuleData storage _moduleData) public {
+        require(_moduleData.module != address(0), "Module missing");
+        // Will revert if module isn't upgradable
+        UpgradableModuleFactory(_moduleData.moduleFactory).upgrade(_moduleData.module);
+        emit ModuleUpgraded(_moduleData.moduleTypes, _moduleData.module);
     }
 
     /**
@@ -75,7 +67,7 @@ library TokenLib {
     function removeModule(
         address _module,
         mapping(uint8 => address[]) storage _modules,
-        mapping(address => ModuleData) storage _modulesToData,
+        mapping(address => SecurityTokenStorage.ModuleData) storage _modulesToData,
         mapping(bytes32 => address[]) storage _names
     )
         public
@@ -83,7 +75,7 @@ library TokenLib {
         require(_modulesToData[_module].isArchived, "Not archived");
         require(_modulesToData[_module].module != address(0), "Module missing");
         /*solium-disable-next-line security/no-block-members*/
-        emit ModuleRemoved(_modulesToData[_module].moduleTypes, _module, now);
+        emit ModuleRemoved(_modulesToData[_module].moduleTypes, _module);
         // Remove from module type list
         uint8[] memory moduleTypes = _modulesToData[_module].moduleTypes;
         for (uint256 i = 0; i < moduleTypes.length; i++) {
@@ -110,7 +102,7 @@ library TokenLib {
         uint8 _type,
         uint256 _index,
         mapping(uint8 => address[]) storage _modules,
-        mapping(address => ModuleData) storage _modulesToData
+        mapping(address => SecurityTokenStorage.ModuleData) storage _modulesToData
     )
         internal
     {
@@ -140,7 +132,7 @@ library TokenLib {
         uint256 _change,
         bool _increase,
         address _polyToken,
-        mapping(address => ModuleData) storage _modulesToData
+        mapping(address => SecurityTokenStorage.ModuleData) storage _modulesToData
     )
         public
     {
@@ -158,37 +150,13 @@ library TokenLib {
     }
 
     /**
-     * @notice Validates permissions with PermissionManager if it exists. If there's no permission return false
-     * @dev Note that IModule withPerm will allow ST owner all permissions by default
-     * @dev this allows individual modules to override this logic if needed (to not allow ST owner all permissions)
-     * @param _modules is the modules to check permissions on
-     * @param _delegate is the address of the delegate
-     * @param _module is the address of the PermissionManager module
-     * @param _perm is the permissions data
-     * @return success
-     */
-    function checkPermission(address[] storage _modules, address _delegate, address _module, bytes32 _perm) public view returns(bool) {
-        if (_modules.length == 0) {
-            return false;
-        }
-
-        for (uint8 i = 0; i < _modules.length; i++) {
-            if (IPermissionManager(_modules[i]).checkPermission(_delegate, _module, _perm)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /**
      * @notice Queries a value at a defined checkpoint
      * @param _checkpoints is array of Checkpoint objects
      * @param _checkpointId is the Checkpoint ID to query
      * @param _currentValue is the Current value of checkpoint
      * @return uint256
      */
-    function getValueAt(Checkpoint[] storage _checkpoints, uint256 _checkpointId, uint256 _currentValue) public view returns(uint256) {
+    function getValueAt(SecurityTokenStorage.Checkpoint[] storage _checkpoints, uint256 _checkpointId, uint256 _currentValue) public view returns(uint256) {
         //Checkpoint id 0 is when the token is first created - everyone has a zero balance
         if (_checkpointId == 0) {
             return 0;
@@ -227,7 +195,7 @@ library TokenLib {
      * @param _checkpoints is the affected checkpoint object array
      * @param _newValue is the new value that needs to be stored
      */
-    function adjustCheckpoints(TokenLib.Checkpoint[] storage _checkpoints, uint256 _newValue, uint256 _currentCheckpointId) public {
+    function adjustCheckpoints(SecurityTokenStorage.Checkpoint[] storage _checkpoints, uint256 _newValue, uint256 _currentCheckpointId) public {
         //No checkpoints set yet
         if (_currentCheckpointId == 0) {
             return;
@@ -237,45 +205,113 @@ library TokenLib {
             return;
         }
         //New checkpoint, so record balance
-        _checkpoints.push(TokenLib.Checkpoint({checkpointId: _currentCheckpointId, value: _newValue}));
+        _checkpoints.push(SecurityTokenStorage.Checkpoint({checkpointId: _currentCheckpointId, value: _newValue}));
     }
 
     /**
     * @notice Keeps track of the number of non-zero token holders
-    * @param _investorData Date releated to investor metrics
+    * @param _holderCount Number of current token holders
     * @param _from Sender of transfer
     * @param _to Receiver of transfer
     * @param _value Value of transfer
     * @param _balanceTo Balance of the _to address
     * @param _balanceFrom Balance of the _from address
+    * @param _dataStore address of data store
     */
     function adjustInvestorCount(
-        InvestorDataStorage storage _investorData,
+        uint256 _holderCount,
         address _from,
         address _to,
         uint256 _value,
         uint256 _balanceTo,
-        uint256 _balanceFrom
-    ) 
-        public 
+        uint256 _balanceFrom,
+        address _dataStore
+    )
+        public
+        returns(uint256)
     {
         if ((_value == 0) || (_from == _to)) {
-            return;
+            return _holderCount;
         }
         // Check whether receiver is a new token holder
         if ((_balanceTo == 0) && (_to != address(0))) {
-            _investorData.investorCount = (_investorData.investorCount).add(1);
+            _holderCount = _holderCount.add(1);
+            IDataStore dataStore = IDataStore(_dataStore);
+            if (!_isExistingInvestor(_to, dataStore)) {
+                dataStore.insertAddress(INVESTORSKEY, _to);
+                //KYC data can not be present if added is false and hence we can set packed KYC as uint256(1) to set added as true
+                dataStore.setUint256(_getKey(WHITELIST, _to), uint256(1));
+            }
         }
         // Check whether sender is moving all of their tokens
         if (_value == _balanceFrom) {
-            _investorData.investorCount = (_investorData.investorCount).sub(1);
-        }
-        //Also adjust investor list
-        if (!_investorData.investorListed[_to] && (_to != address(0))) {
-            _investorData.investors.push(_to);
-            _investorData.investorListed[_to] = true;
+            _holderCount = _holderCount.sub(1);
         }
 
+        return _holderCount;
     }
 
+    /**
+     * @notice Validate transfer with TransferManager module if it exists
+     * @dev TransferManager module has a key of 2
+     * @param from sender of transfer
+     * @param to receiver of transfer
+     * @param value value of transfer
+     * @param data data to indicate validation
+     * @param modules Array of addresses for transfer managers
+     * @param modulesToData Mapping of the modules details
+     * @param transfersFrozen whether the transfer are frozen or not.
+     * @return bool
+     */
+    function verifyTransfer(
+        address[] storage modules,
+        mapping(address => SecurityTokenStorage.ModuleData) storage modulesToData,
+        address from,
+        address to,
+        uint256 value,
+        bytes memory data,
+        bool transfersFrozen
+    )
+        public
+        view
+        returns(bool, bytes32)
+    {
+        if (!transfersFrozen) {
+            bool isInvalid = false;
+            bool isValid = false;
+            bool isForceValid = false;
+            // Use the local variables to avoid the stack too deep error
+            transfersFrozen = false; // bool unarchived = false;
+            bytes32 appCode;
+            for (uint256 i = 0; i < modules.length; i++) {
+                if (!modulesToData[modules[i]].isArchived) {
+                    transfersFrozen = true;
+                    (ITransferManager.Result valid, bytes32 reason) = ITransferManager(modules[i]).verifyTransfer(from, to, value, data);
+                    if (valid == ITransferManager.Result.INVALID) {
+                        isInvalid = true;
+                        appCode = reason;
+                    } else if (valid == ITransferManager.Result.VALID) {
+                        isValid = true;
+                    } else if (valid == ITransferManager.Result.FORCE_VALID) {
+                        isForceValid = true;
+                    }
+                }
+            }
+            // If no unarchived modules, return true by default
+            // Use the local variables to avoid the stack too deep error
+            isValid = transfersFrozen ? (isForceValid ? true : (isInvalid ? false : isValid)) : true;
+            return (isValid, isValid ? bytes32(hex"51"): appCode);
+        }
+        return (false, bytes32(hex"54"));
+    }
+
+    function _getKey(bytes32 _key1, address _key2) internal pure returns(bytes32) {
+        return bytes32(keccak256(abi.encodePacked(_key1, _key2)));
+    }
+
+    function _isExistingInvestor(address _investor, IDataStore dataStore) internal view returns(bool) {
+        uint256 data = dataStore.getUint256(_getKey(WHITELIST, _investor));
+        //extracts `added` from packed `whitelistData`
+        return uint8(data) == 0 ? false : true;
+    }
 }

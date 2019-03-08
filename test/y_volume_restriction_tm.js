@@ -9,6 +9,7 @@ import { setUpPolymathNetwork, deployVRTMAndVerifyed } from "./helpers/createIns
 const SecurityToken = artifacts.require('./SecurityToken.sol');
 const GeneralTransferManager = artifacts.require('./GeneralTransferManager.sol');
 const VolumeRestrictionTM = artifacts.require('./VolumeRestrictionTM.sol');
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require('web3');
 const BN = Web3.utils.BN;
@@ -54,6 +55,8 @@ contract('VolumeRestrictionTransferManager', accounts => {
     let I_STRProxied;
     let I_PolyToken;
     let I_PolymathRegistry;
+    let I_STGetter;
+    let stGetter;
 
     // SecurityToken Details
     const name = "Team";
@@ -74,7 +77,7 @@ contract('VolumeRestrictionTransferManager', accounts => {
     let tempArrayGlobal = new Array();
 
     // Initial fee for ticker registry and security token registry
-    const initRegFee = new BN(web3.utils.toWei("250"));
+    const initRegFee = new BN(web3.utils.toWei("1000"));
 
     const address_zero = "0x0000000000000000000000000000000000000000";
 
@@ -154,7 +157,8 @@ contract('VolumeRestrictionTransferManager', accounts => {
             I_STFactory,
             I_SecurityTokenRegistry,
             I_SecurityTokenRegistryProxy,
-            I_STRProxied
+            I_STRProxied,
+            I_STGetter
         ] = instances;
 
         // STEP 5: Deploy the VolumeRestrictionTMFactory
@@ -190,13 +194,14 @@ contract('VolumeRestrictionTransferManager', accounts => {
         it("Should generate the new security token with the same symbol as registered above", async () => {
             await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
 
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, true, { from: token_owner });
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, true, token_owner, 0, { from: token_owner });
 
             // Verify the successful generation of the security token
             assert.equal(tx.logs[2].args._ticker, symbol.toUpperCase(), "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), token_owner, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -205,7 +210,7 @@ contract('VolumeRestrictionTransferManager', accounts => {
         });
 
         it("Should intialize the auto attached modules", async () => {
-            let moduleData = (await I_SecurityToken.getModulesByType(2))[0];
+            let moduleData = (await stGetter.getModulesByType(2))[0];
             I_GeneralTransferManager = await GeneralTransferManager.at(moduleData);
         });
     });
@@ -224,21 +229,20 @@ contract('VolumeRestrictionTransferManager', accounts => {
         it("Transfer some tokens to different account", async() => {
             // Add tokens in to the whitelist
             let newLatestTime = await getLatestTime();
-            await I_GeneralTransferManager.modifyWhitelistMulti(
+            await I_GeneralTransferManager.modifyKYCDataMulti(
                     [account_investor1, account_investor2, account_investor3],
                     [newLatestTime, newLatestTime, newLatestTime],
                     [newLatestTime, newLatestTime, newLatestTime],
                     [newLatestTime.add(new BN(duration.days(60))), newLatestTime.add(new BN(duration.days(60))), newLatestTime.add(new BN(duration.days(60)))],
-                    [true, true, true],
                     {
                         from: token_owner
                     }
             );
 
             // Mint some tokens and transferred to whitelisted addresses
-            await I_SecurityToken.mint(account_investor1, new BN(web3.utils.toWei("40", "ether")), {from: token_owner});
-            await I_SecurityToken.mint(account_investor2, new BN(web3.utils.toWei("30", "ether")), {from: token_owner});
-            await I_SecurityToken.mint(account_investor3, new BN(web3.utils.toWei("30", "ether")), {from: token_owner});
+            await I_SecurityToken.issue(account_investor1, new BN(web3.utils.toWei("40", "ether")), "0x0", {from: token_owner});
+            await I_SecurityToken.issue(account_investor2, new BN(web3.utils.toWei("30", "ether")), "0x0", {from: token_owner});
+            await I_SecurityToken.issue(account_investor3, new BN(web3.utils.toWei("30", "ether")), "0x0", {from: token_owner});
 
             // Check the balance of the investors
             let bal1 = await I_SecurityToken.balanceOf.call(account_investor1);
@@ -250,6 +254,10 @@ contract('VolumeRestrictionTransferManager', accounts => {
         });
 
         it("Should transfer the tokens freely without any restriction", async() => {
+            console.log(
+                await I_SecurityToken.canTransfer.call(account_investor3, new BN(web3.utils.toWei('5', 'ether')), "0x0", {from: account_investor1})
+            )
+            console.log(web3.utils.fromWei((await I_SecurityToken.balanceOf.call(account_investor1)).toString()));
             await I_SecurityToken.transfer(account_investor3, new BN(web3.utils.toWei('5', 'ether')), { from: account_investor1 });
             let bal1 = await I_SecurityToken.balanceOf.call(account_investor3);
              // Verifying the balances
@@ -678,8 +686,8 @@ contract('VolumeRestrictionTransferManager', accounts => {
 
         it("Should succesfully transact the tokens by investor 1 just after the startTime", async() => {
             // Check the transfer will be valid or not by calling the verifyTransfer() directly by using _isTransfer = false
-            let result = await I_VolumeRestrictionTM.verifyTransfer.call(account_investor1, account_investor3, new BN(web3.utils.toWei('.3', "ether")), "0x0", false);
-            assert.equal(result.toString(), 1);
+            let result = await I_VolumeRestrictionTM.verifyTransfer.call(account_investor1, account_investor3, new BN(web3.utils.toWei('.3', "ether")), "0x0");
+            assert.equal(result[0].toString(), 1);
             // Perform the transaction
             console.log(`
                 Gas estimation (Individual): ${await I_SecurityToken.transfer.estimateGas(account_investor3, new BN(web3.utils.toWei('.3', "ether")), {from: account_investor1})}`
@@ -1166,7 +1174,7 @@ contract('VolumeRestrictionTransferManager', accounts => {
         })
 
         it("Should sell more tokens on the same day after changing the total supply", async() => {
-            await I_SecurityToken.mint(account_investor3, new BN(web3.utils.toWei("10")), {from: token_owner});
+            await I_SecurityToken.issue(account_investor3, new BN(web3.utils.toWei("10")), "0x0", {from: token_owner});
 
             let startTime = (await I_VolumeRestrictionTM.getIndividualRestriction.call(account_investor3))[1].toString();
             let startTimedaily = (await I_VolumeRestrictionTM.getIndividualDailyRestriction.call(account_investor3))[1].toString();
@@ -1298,20 +1306,19 @@ contract('VolumeRestrictionTransferManager', accounts => {
 
         it("Should add the investor 4 in the whitelist", async() => {
             let newLatestTime = await getLatestTime();
-            await I_GeneralTransferManager.modifyWhitelist(
+            await I_GeneralTransferManager.modifyKYCData(
                 account_investor4,
                 newLatestTime,
                 newLatestTime,
                 newLatestTime.add(new BN(duration.days(30))),
-                true,
                 {
                     from: token_owner
                 }
             );
         });
 
-        it("Should mint some tokens to investor 4", async() => {
-            await I_SecurityToken.mint(account_investor4, new BN(web3.utils.toWei("20")), {from: token_owner});
+        it("Should issue some tokens to investor 4", async() => {
+            await I_SecurityToken.issue(account_investor4, new BN(web3.utils.toWei("20")), "0x0", {from: token_owner});
         });
 
         it("Should add the default daily restriction successfully", async() => {
@@ -1665,9 +1672,9 @@ contract('VolumeRestrictionTransferManager', accounts => {
     describe("VolumeRestriction Transfer Manager Factory test cases", async() => {
 
         it("Should get the exact details of the factory", async() => {
-            assert.equal(await I_VolumeRestrictionTMFactory.getSetupCost.call(),0);
-            assert.equal((await I_VolumeRestrictionTMFactory.getTypes.call())[0],2);
-            assert.equal(web3.utils.toAscii(await I_VolumeRestrictionTMFactory.getName.call())
+            assert.equal(await I_VolumeRestrictionTMFactory.setupCost.call(),0);
+            assert.equal((await I_VolumeRestrictionTMFactory.types.call())[0],2);
+            assert.equal(web3.utils.toAscii(await I_VolumeRestrictionTMFactory.name.call())
                         .replace(/\u0000/g, ''),
                         "VolumeRestrictionTM",
                         "Wrong Module added");
@@ -1677,14 +1684,11 @@ contract('VolumeRestrictionTransferManager', accounts => {
             assert.equal(await I_VolumeRestrictionTMFactory.title.call(),
                         "Volume Restriction Transfer Manager",
                         "Wrong Module added");
-            assert.equal(await I_VolumeRestrictionTMFactory.getInstructions.call(),
-                        "Module used to restrict the volume of tokens traded by the token holders",
-                        "Wrong Module added");
-            assert.equal(await I_VolumeRestrictionTMFactory.version.call(), "1.0.0");
+            assert.equal(await I_VolumeRestrictionTMFactory.version.call(), "3.0.0");
         });
 
         it("Should get the tags of the factory", async() => {
-            let tags = await I_VolumeRestrictionTMFactory.getTags.call();
+            let tags = await I_VolumeRestrictionTMFactory.tags.call();
             assert.equal(tags.length, 5);
             assert.equal(web3.utils.toAscii(tags[0]).replace(/\u0000/g, ''), "Maximum Volume");
         });

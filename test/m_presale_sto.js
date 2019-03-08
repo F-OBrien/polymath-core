@@ -9,6 +9,7 @@ const PreSaleSTOFactory = artifacts.require("./PreSaleSTOFactory.sol");
 const PreSaleSTO = artifacts.require("./PreSaleSTO.sol");
 const SecurityToken = artifacts.require("./SecurityToken.sol");
 const GeneralTransferManager = artifacts.require("./GeneralTransferManager");
+const STGetter = artifacts.require("./STGetter.sol");
 
 const Web3 = require("web3");
 let BN = Web3.utils.BN;
@@ -50,6 +51,8 @@ contract("PreSaleSTO", async (accounts) => {
     let I_PolyToken;
     let I_PolymathRegistry;
     let I_STRGetter;
+    let I_STGetter;
+    let stGetter;
 
     // SecurityToken Details for funds raise Type ETH
     const name = "Team";
@@ -69,7 +72,7 @@ contract("PreSaleSTO", async (accounts) => {
     const budget = 0;
 
     // Initial fee for ticker registry and security token registry
-    const initRegFee = new BN(web3.utils.toWei("250"));
+    const initRegFee = new BN(web3.utils.toWei("1000"));
     let endTime;
     const address_zero = "0x0000000000000000000000000000000000000000";
     const one_address = "0x0000000000000000000000000000000000000001";
@@ -101,7 +104,8 @@ contract("PreSaleSTO", async (accounts) => {
             I_SecurityTokenRegistry,
             I_SecurityTokenRegistryProxy,
             I_STRProxied,
-            I_STRGetter
+            I_STRGetter,
+            I_STGetter
         ] = instances;
 
         // STEP 4: Deploy the PreSaleSTOFactory
@@ -137,14 +141,15 @@ contract("PreSaleSTO", async (accounts) => {
 
         it("Should generate the new security token with the same symbol as registered above", async () => {
             await I_PolyToken.approve(I_STRProxied.address, initRegFee, { from: token_owner });
-            
-            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, { from: token_owner });
+
+            let tx = await I_STRProxied.generateSecurityToken(name, symbol, tokenDetails, false, token_owner, 0, { from: token_owner });
 
             // Verify the successful generation of the security token
             assert.equal(tx.logs[2].args._ticker, symbol, "SecurityToken doesn't get deployed");
 
             I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
-
+            stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), token_owner, "Incorrect wallet set")
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -153,7 +158,7 @@ contract("PreSaleSTO", async (accounts) => {
         });
 
         it("Should intialize the auto attached modules", async () => {
-            let moduleData = (await I_SecurityToken.getModulesByType(transferManagerKey))[0];
+            let moduleData = (await stGetter.getModulesByType(transferManagerKey))[0];
             I_GeneralTransferManager = await GeneralTransferManager.at(moduleData);
         });
 
@@ -226,7 +231,7 @@ contract("PreSaleSTO", async (accounts) => {
 
         it("Should get the permissions", async () => {
             let perm = await I_PreSaleSTO.getPermissions.call();
-            assert.equal(web3.utils.toAscii(perm[0]).replace(/\u0000/g, ""), "PRE_SALE_ADMIN");
+            assert.equal(web3.utils.toAscii(perm[0]).replace(/\u0000/g, ""), "ADMIN");
         });
     });
 
@@ -241,7 +246,7 @@ contract("PreSaleSTO", async (accounts) => {
             expiryTime = toTime + duration.days(100);
 
             // Add the Investor in to the whitelist
-            let tx = await I_GeneralTransferManager.modifyWhitelist(account_investor1, fromTime, toTime, expiryTime, true, {
+            let tx = await I_GeneralTransferManager.modifyKYCData(account_investor1, fromTime, toTime, expiryTime, {
                 from: account_issuer,
                 gas: 6000000
             });
@@ -282,7 +287,7 @@ contract("PreSaleSTO", async (accounts) => {
             expiryTime = toTime + duration.days(100);
 
             // Add the Investor in to the whitelist
-            let tx1 = await I_GeneralTransferManager.modifyWhitelist(account_investor2, fromTime, toTime, expiryTime, true, {
+            let tx1 = await I_GeneralTransferManager.modifyKYCData(account_investor2, fromTime, toTime, expiryTime, {
                 from: account_issuer,
                 gas: 6000000
             });
@@ -290,7 +295,7 @@ contract("PreSaleSTO", async (accounts) => {
             assert.equal(tx1.logs[0].args._investor, account_investor2, "Failed in adding the investor in whitelist");
 
             // Add the Investor in to the whitelist
-            let tx2 = await I_GeneralTransferManager.modifyWhitelist(account_investor3, fromTime, toTime, expiryTime, true, {
+            let tx2 = await I_GeneralTransferManager.modifyKYCData(account_investor3, fromTime, toTime, expiryTime, {
                 from: account_issuer,
                 gas: 6000000
             });
@@ -420,10 +425,10 @@ contract("PreSaleSTO", async (accounts) => {
 
     describe("Test cases for the PresaleSTOFactory", async () => {
         it("should get the exact details of the factory", async () => {
-            assert.equal(await I_PreSaleSTOFactory.getSetupCost.call(), 0);
-            assert.equal((await I_PreSaleSTOFactory.getTypes.call())[0], 3);
+            assert.equal(await I_PreSaleSTOFactory.setupCost.call(), 0);
+            assert.equal((await I_PreSaleSTOFactory.types.call())[0], 3);
             assert.equal(
-                web3.utils.toAscii(await I_PreSaleSTOFactory.getName.call()).replace(/\u0000/g, ""),
+                web3.utils.toAscii(await I_PreSaleSTOFactory.name.call()).replace(/\u0000/g, ""),
                 "PreSaleSTO",
                 "Wrong Module added"
             );
@@ -433,12 +438,7 @@ contract("PreSaleSTO", async (accounts) => {
                 "Wrong Module added"
             );
             assert.equal(await I_PreSaleSTOFactory.title.call(), "PreSale STO", "Wrong Module added");
-            assert.equal(
-                await I_PreSaleSTOFactory.getInstructions.call(),
-                "Configure and track pre-sale token allocations",
-                "Wrong Module added"
-            );
-            let tags = await I_PreSaleSTOFactory.getTags.call();
+            let tags = await I_PreSaleSTOFactory.tags.call();
             assert.equal(web3.utils.toAscii(tags[0]).replace(/\u0000/g, ""), "Presale");
         });
     });
