@@ -256,7 +256,7 @@ contract("POLYCappedSTO", async (accounts) => {
             _rate.push(new BN(10).mul(e16)); // 0.10 POLY/Token
             _minimumInvestment.push(new BN(50).mul(e18)); // 50 POLY
             _nonAccreditedLimit.push(new BN(10000).mul(e18)); // 10k POLY
-            _maxNonAccreditedInvestors.push(new BN(50));
+            _maxNonAccreditedInvestors.push(new BN(0)); // 0 = unlimited
             _wallet.push(WALLET);
             _treasuryWallet.push(TREASURYWALLET);
 
@@ -362,7 +362,7 @@ contract("POLYCappedSTO", async (accounts) => {
             _rate.push(new BN(10).mul(e16)); // 0.10 POLY/Token
             _minimumInvestment.push(new BN(0)); // 0 POLY
             _nonAccreditedLimit.push(new BN(10000).mul(e18)); // 10000 POLY
-            _maxNonAccreditedInvestors.push(new BN(4)) // 0 = Unlimited
+            _maxNonAccreditedInvestors.push(new BN(4))
             _wallet.push(WALLET);
             _treasuryWallet.push(address_zero);
 
@@ -1421,7 +1421,7 @@ contract("POLYCappedSTO", async (accounts) => {
             assert.equal(tx2.logs[0].args._investor, ACCREDITED1, "Failed in adding the investor in whitelist");
         });
 
-        it("should successfully modify accredited addresses for the STOs", async () => {
+        it("Should successfully get investor accredited status for the STOs", async () => {
              let stoId = 0;
              let totalStatus = await I_POLYCappedSTO_Array[stoId].getAccreditedData.call();
              console.log(totalStatus);
@@ -1700,6 +1700,14 @@ contract("POLYCappedSTO", async (accounts) => {
                 init_investorInvestedUSD.add(investment_USD).toString(),
                 "Investor Investment USD did not increase"
             );
+        });
+
+        it("Should successfully modify NONACCREDITED cap for NONACCREDITED1 and NONACCREDITED2 -- failed array length mismatch", async () => {
+            let stoId = 0;
+
+            await catchRevert(I_POLYCappedSTO_Array[stoId].changeNonAccreditedLimit([NONACCREDITED1, NONACCREDITED2], [_nonAccreditedLimit[stoId].mul(new BN(2))], {
+                from: ISSUER
+            }));
         });
 
         it("Should successfully modify NONACCREDITED cap for NONACCREDITED1", async () => {
