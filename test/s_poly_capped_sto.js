@@ -1349,7 +1349,7 @@ contract("POLYCappedSTO", async (accounts) => {
 
             // First buy up all tokens - should succeed
             await I_POLYCappedSTO_Array[stoId].buyWithPOLY(ACCREDITED1, max_investment, { from: ACCREDITED1 });
-            assert.equal(await I_POLYCappedSTO_Array[stoId].isOpen(), false, "STO is not Closed");
+            assert.equal(await I_POLYCappedSTO_Array[stoId].isOpen(), false, "STO is Open");
             assert.equal(await I_POLYCappedSTO_Array[stoId].capReached(), true, "STO cap has not been reached");
 
             // try to buy more tokens should fail for both accredited and non accredited investors
@@ -1887,7 +1887,7 @@ contract("POLYCappedSTO", async (accounts) => {
             );
         });
 
-        it("Should successfully buy a granular amount and refund balance when buying indivisible token with POLY", async () => {
+        it("Should successfully buy a granular amount and refund balance when buying a indivisible token with POLY", async () => {
             let stoId = 0;
 
             await I_SecurityToken.changeGranularity(e18, { from: ISSUER });
@@ -2051,6 +2051,80 @@ contract("POLYCappedSTO", async (accounts) => {
             await I_SecurityToken.changeGranularity(1, { from: ISSUER });
         });
 
+        it("Should fail due to calculated number of tokens being less than the granularity when buying a indivisible token", async () => {
+            let stoId = 0;
+
+            await I_SecurityToken.changeGranularity(e18, { from: ISSUER });
+            // check minimum investment has already been met
+            let investorInvested = await I_POLYCappedSTO_Array[stoId].investorInvested(ACCREDITED1);
+            let minimumInvestment = await I_POLYCappedSTO_Array[stoId].minimumInvestment.call();
+            let minInvested = investorInvested.gte(minimumInvestment);
+            assert.equal(minInvested, true, "minimum investment not met")
+
+            let investment_POLY = new BN(50).mul(e16); // Invest 0.5 POLY
+
+            console.log("          Investment: ".grey + investment_POLY.toString().grey + " POLY".grey);
+
+            await I_PolyToken.getTokens(investment_POLY, ACCREDITED1);
+            await I_PolyToken.approve(I_POLYCappedSTO_Array[stoId].address, investment_POLY, { from: ACCREDITED1 });
+
+            // Buy With POLY
+            await catchRevert(I_POLYCappedSTO_Array[stoId].buyWithPOLY(ACCREDITED1, investment_POLY, {
+                from: ACCREDITED1,
+                gasPrice: GAS_PRICE
+            }));
+            await I_SecurityToken.changeGranularity(1, { from: ISSUER });
+        });
+
+
+        it("Should fail to buy if granularity prevents buying remaining tokens when buying up to the cap", async () => {
+            let stoId = 0;
+            let snapId = await takeSnapshot();
+
+            // Calculate the remaing number of tokens
+            let cap = await I_POLYCappedSTO_Array[stoId].cap.call();
+            let init_STOTokenSold = await I_POLYCappedSTO_Array[stoId].getTokensSold();
+            let remainingTokens = cap.sub(init_STOTokenSold);
+
+            let rate = await I_POLYCappedSTO_Array[stoId].rate.call();
+
+            let remainingPOLY = remainingTokens.mul(e18).div(rate); // Calculate investment amount
+            let investment_POLY1 = remainingPOLY.sub(new BN(50).mul(e16)); // Calculate investment amount 1
+            let investment_POLY2 = new BN(10).mul(e18); // Calculate investment amount 2
+
+            await I_PolyToken.getTokens(investment_POLY1.add(investment_POLY2), ACCREDITED1);
+            await I_PolyToken.approve(I_POLYCappedSTO_Array[stoId].address, investment_POLY1.add(investment_POLY2), { from: ACCREDITED1 });
+
+            // Buy first batch With POLY
+            let tx1 = await I_POLYCappedSTO_Array[stoId].buyWithPOLY(ACCREDITED1, investment_POLY1, {
+                from: ACCREDITED1,
+                gasPrice: GAS_PRICE
+            });
+            let gasCost2 = new BN(GAS_PRICE).mul(new BN(tx1.receipt.gasUsed));
+            console.log("          Gas buyWithPOLY: ".grey + new BN(tx1.receipt.gasUsed).toString().grey);
+
+            assert.equal(await I_POLYCappedSTO_Array[stoId].capReached(), false, "STO cap has been reached");
+            assert.equal(await I_POLYCappedSTO_Array[stoId].isOpen(), true, "STO is not Open");
+
+            let new_STOTokenSold = await I_POLYCappedSTO_Array[stoId].getTokensSold();
+            let newRemainingTokens = cap.sub(new_STOTokenSold);
+            console.log("          Remaining Tokens: ".grey + newRemainingTokens.toString().grey);
+
+            // change granularity to make indivisible
+            await I_SecurityToken.changeGranularity(e18, { from: ISSUER });
+
+            // Buy second batch With POLY (should fail due to granularity)
+            await catchRevert(I_POLYCappedSTO_Array[stoId].buyWithPOLY(ACCREDITED1, investment_POLY2, {
+                from: ACCREDITED1,
+                gasPrice: GAS_PRICE
+            }));
+
+            assert.equal(await I_POLYCappedSTO_Array[stoId].capReached(), false, "STO cap has been reached");
+            assert.equal(await I_POLYCappedSTO_Array[stoId].isOpen(), true, "STO is not Open");
+
+            await revertToSnapshot(snapId);
+        });
+
         it("Should successfully buy a partial amount and refund balance when reaching the cap", async () => {
             let stoId = 0;
             let snapId = await takeSnapshot();
@@ -2133,7 +2207,7 @@ contract("POLYCappedSTO", async (accounts) => {
             console.log("          Final tokens sold: ".grey + final_STOTokenSold.toString().grey);
 
             assert.equal(await I_POLYCappedSTO_Array[stoId].capReached(), true, "STO cap has not been reached");
-            assert.equal(await I_POLYCappedSTO_Array[stoId].isOpen(), false, "STO is not Open");
+            assert.equal(await I_POLYCappedSTO_Array[stoId].isOpen(), false, "STO is Open");
             assert.equal(
                 final_TokenSupply.toString(),
                 init_TokenSupply
