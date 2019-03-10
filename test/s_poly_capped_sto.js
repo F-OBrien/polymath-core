@@ -2732,6 +2732,26 @@ contract("POLYCappedSTO", async (accounts) => {
         });
     });
 
+    describe("Miscelanious tests", async () => {
+        it("Should pause before end time and fail to pause after end time", async () => {
+            let stoId = 0;
+            let snapId = await takeSnapshot();
+            // Pause the STO
+            await I_POLYCappedSTO_Array[stoId].pause({ from: ISSUER });
+            assert.equal(await I_POLYCappedSTO_Array[stoId].paused.call(), true, "STO did not pause successfully");
+            // Unpause the STO
+            await I_POLYCappedSTO_Array[stoId].unpause({ from: ISSUER });
+            assert.equal(await I_POLYCappedSTO_Array[stoId].paused.call(), false, "STO did not unpause successfully");
+            // Advance time to after STO end
+            await increaseTime(duration.days(120));
+            // Pause the STO --Should fail STO has ended
+            await catchRevert(I_POLYCappedSTO_Array[stoId].pause({ from: ISSUER }));
+            assert.equal(await I_POLYCappedSTO_Array[stoId].paused.call(), false, "STO paused");
+
+            await revertToSnapshot(snapId);
+        });
+    });
+
     ///////////////////
     // FACTORY TESTS //
     ///////////////////
@@ -2830,6 +2850,31 @@ contract("POLYCappedSTO", async (accounts) => {
             assert.equal(upper[0], 4, "Wrong upper bound");
             assert.equal(upper[1], 5, "Wrong upper bound");
             assert.equal(upper[2], 6, "Wrong upper bound");
+        });
+
+        it("Should fail to change tags -- bad owner", async () => {
+            let newTags = [];
+            newTags[0] = web3.utils.stringToHex("Tag1");
+            newTags[1] = web3.utils.stringToHex("Tag2");
+            newTags[2] = web3.utils.stringToHex("Tag3");
+            await catchRevert(I_POLYCappedSTOFactory.changeTags(newTags, { from: ISSUER }));
+        });
+
+        it("Should fail to change tags -- tags length = 0", async () => {
+            let newTags = [];
+            await catchRevert(I_POLYCappedSTOFactory.changeTags(newTags, { from: POLYMATH }));
+        });
+
+        it("Should successfully change tags", async () => {
+            let newTags = [];
+            newTags[0] = web3.utils.stringToHex("Tag1");
+            newTags[1] = web3.utils.stringToHex("Tag2");
+            newTags[2] = web3.utils.stringToHex("Tag3");
+            await I_POLYCappedSTOFactory.changeTags(newTags, { from: POLYMATH });
+            let tags = await I_POLYCappedSTOFactory.tags.call();
+            assert.equal(web3.utils.hexToString(tags[0]), "Tag1", "Incorrect tag 1");
+            assert.equal(web3.utils.hexToString(tags[1]), "Tag2", "Incorrect tag 2");
+            assert.equal(web3.utils.hexToString(tags[2]), "Tag3", "Incorrect tag 3");
         });
 
         it("Should fail to transfer Ownership -- bad owner", async () => {
