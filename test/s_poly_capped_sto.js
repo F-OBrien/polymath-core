@@ -11,6 +11,7 @@ const SecurityToken = artifacts.require("./SecurityToken.sol");
 const GeneralTransferManager = artifacts.require("./GeneralTransferManager");
 const PolyTokenFaucet = artifacts.require("./PolyTokenFaucet.sol");
 const STGetter = artifacts.require("./STGetter.sol");
+const POLYCappedSTOFactory = artifacts.require("./POLYCappedSTOFactory.sol");
 
 const Web3 = require("web3");
 let BN = Web3.utils.BN;
@@ -2888,6 +2889,10 @@ contract("POLYCappedSTO", async (accounts) => {
         it("Should successfully transfer Ownership", async () => {
             await I_POLYCappedSTOFactory.transferOwnership(ISSUER, { from: POLYMATH });
             assert.equal(await I_POLYCappedSTOFactory.owner.call(), ISSUER, "Owner doesn't get changed");
+        });
+
+        it("Should fail to deploy a new POLYCappedSTOFactory -- logic contract is address zero", async () => {
+        await catchRevert(POLYCappedSTOFactory.new(STOSetupCost, new BN(0), address_zero, I_PolymathRegistry.address, { from: POLYMATH }));
         });
     });
 });
