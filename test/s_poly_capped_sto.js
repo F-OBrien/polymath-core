@@ -2758,7 +2758,11 @@ contract("POLYCappedSTO", async (accounts) => {
         });
 
         it("Should fail to deploy a new POLYCappedSTOProxy -- logic contract is address zero", async () => {
+<<<<<<< HEAD
         await catchRevert(POLYCappedSTOProxy.new("3.0.0", I_SecurityToken.address, I_PolyToken.address, address_zero, { from: POLYMATH }));
+=======
+        await POLYCappedSTOProxy.new("3.0.0", I_SecurityToken.address, I_PolyToken.address, address_zero, { from: POLYMATH });
+>>>>>>> 9f90e8d7d74ffd2f418079675a092b248e5d4504
         });
     });
 
