@@ -19,6 +19,10 @@ contract POLYPeggedSTOStorage {
     // If rate is 10^18, buyer will get 1 token unit for every USD worth of POLY invested.
     uint256 public rate;
 
+    // Minimum funds that must be raised in USD (multiplied by 10^18) before issuer can withdraw funds
+    // if the STO ends or is finalized before this soft cap is reached investments can be withdrawn by or refunded to the investor
+    uint256 public softCapUSD;
+
     // Minimum investable amount in USD Value of POLY
     uint256 public minimumInvestment;
 
@@ -56,4 +60,9 @@ contract POLYPeggedSTOStorage {
     // Final amount of tokens returned to issuer
     uint256 public finalAmountReturned;
 
+    // Amount of funds wihdrawn by the issuer
+    uint256 public totalWithdrawnPOLY;
+
+    // Amount of funds refunded to investors
+    uint256 public totalRefundedPOLY;
 }

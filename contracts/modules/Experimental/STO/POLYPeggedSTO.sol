@@ -9,7 +9,11 @@ import "openzeppelin-solidity/contracts/math/SafeMath.sol";
 import "./POLYPeggedSTOStorage.sol";
 
 /**
- * @title STO module for crowdsale that accepts POLY Pegged to USD
+ * @title STO module for refundable crowdsale that accepts POLY Pegged to USD
+ * @notice Note if you allow tokens to be traded before the soft cap is reached the
+ * purchaser could sell their tokens and if the soft cap is not met still claim a
+ * refund leaving the investor that purchased the tokens from the original investors
+ * with with worthless tokens.
  */
 contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
     using SafeMath for uint256;
@@ -46,12 +50,14 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
         uint256 _spentValue
     );
     event ReserveTokenMint(address indexed _owner, address indexed _treasuryWallet, uint256 _tokens);
-    event SetWallet(address _oldWallet, address _newWallet);
     event SetTreasuryWallet(address _oldWallet, address _newWallet);
     event SetLimits(uint256 _minimumInvestment, uint256 _nonAccreditedLimit, uint256 _maxNonAccreditedInvestors);
     event SetTimes(uint256 _startTime, uint256 _endTime);
     event SetRate(uint256 _rate);
     event SetCap(uint256 _cap);
+    event SetSoftCapUSD(uint256 _softCapUSD);
+    event FundsWithdrawn(uint256 _withdrawn);
+    event FundsRefunded(address _beneficiary, uint256 _withdrawn);
 
     ///////////////
     // Modifiers //
@@ -78,10 +84,10 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
      * @param _endTime Unix timestamp at which offering get ended
      * @param _cap Maximum No. of token base units for sale
      * @param _rate Token units a buyer gets multiplied by 10^18 per USD value of POLY
+     * @param _softCapUSD minimum funds to be raised in USD or allow refunds
      * @param _minimumInvestment Minimun investment in USD (* 10**18)
      * @param _nonAccreditedLimit Default Limit in USD (* 10**18) for non-accredited investors
      * @param _maxNonAccreditedInvestors Maximum number of non-accredited investors allowed (0 = unlimited)
-     * @param _wallet Ethereum account address to hold the funds
      * @param _treasuryWallet Ethereum account where unsold Tokens will be sent
      */
     function configure(
@@ -89,10 +95,10 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
         uint256 _endTime,
         uint256 _cap,
         uint256 _rate,
+        uint256 _softCapUSD,
         uint256 _minimumInvestment,
         uint256 _nonAccreditedLimit,
         uint256 _maxNonAccreditedInvestors,
-        address payable _wallet,
         address _treasuryWallet
     )
         external
@@ -102,9 +108,10 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
         _modifyTimes(_startTime, _endTime);
         _modifyCap (_cap);
         _modifyRate (_rate);
-        _modifyWalletAddress(_wallet);
         _modifyTreasuryWallet(_treasuryWallet);
         _modifyLimits(_minimumInvestment, _nonAccreditedLimit, _maxNonAccreditedInvestors);
+        _modifySoftCapUSD(_softCapUSD);
+
     }
 
     /**
@@ -151,16 +158,6 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
     }
 
     /**
-     * @dev Modifies addresses used as wallet and treasury wallet
-     * @param _wallet Address of wallet where funds are sent
-     */
-    function modifyWalletAddress(address payable _wallet) external {
-        //can be modified even when STO started
-        _onlySecurityTokenOwner();
-        _modifyWalletAddress(_wallet);
-    }
-
-    /**
      * @notice Use to change the treasury wallet
      * @param _treasuryWallet Ethereum account address to receive unsold tokens
      * @notice Set to address zero to use dataStore treasuryWallet
@@ -170,6 +167,16 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
         _onlySecurityTokenOwner();
         _modifyTreasuryWallet(_treasuryWallet);
     }
+
+    /**
+     * @dev Modifies minimum funds to be raised in USD or allow refunds
+     * @param _softCapUSD Minimum number fund in USD required to be raised or refunds will be allowed (by 10^18)
+     */
+    function modifySoftCapUSD(uint256 _softCapUSD) external notStarted {
+        _onlySecurityTokenOwner();
+        _modifySoftCapUSD(_softCapUSD);
+    }
+
 
     function _modifyLimits(
         uint256 _minimumInvestment,
@@ -202,15 +209,15 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
         emit SetTimes(_startTime, _endTime);
     }
 
-    function _modifyWalletAddress(address payable _wallet) internal {
-        require(_wallet != address(0), "Invalid wallet");
-        emit SetWallet(wallet, _wallet);
-        wallet = _wallet;
-    }
-
     function _modifyTreasuryWallet(address _treasuryWallet) internal {
         emit SetTreasuryWallet(treasuryWallet, _treasuryWallet);
         treasuryWallet = _treasuryWallet;
+    }
+
+    function _modifySoftCapUSD(uint256 _softCapUSD) internal {
+        require(_softCapUSD <= DecimalMath.div(cap, rate), "Invalid soft cap");
+        softCapUSD = _softCapUSD;
+        emit SetSoftCapUSD (softCapUSD);
     }
 
     ////////////////////
@@ -323,8 +330,8 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
         }
         require(_canBuy(_beneficiary), "Unauthorized beneficiary");
         (uint256 spentUSD, uint256 spentValue, uint256 tokens)  = _buyTokens(_beneficiary, _investedTokens, _fundRaiseType, _minTokens);
-        // Forward coins to issuer wallet
-        require(_token.transferFrom(msg.sender, wallet, spentValue), "Transfer failed");
+        // Forward POLY to the STO contract
+        require(_token.transferFrom(msg.sender, address(this), spentValue), "Transfer failed");
         emit FundsReceived(msg.sender, _beneficiary, _fundRaiseType, _investedTokens, spentValue);
         return (spentUSD, spentValue, tokens);
     }
@@ -477,6 +484,50 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
         return flag > 0 ? true : false;
     }
 
+    /**
+    * @notice Withdraws POLY funds raised after the soft cap has been reached
+    */
+    function withdrawFunds() external {
+        _onlySecurityTokenOwner();
+        require(softCapReached(), "Soft cap not reached");
+        uint256 availableToWithdraw = fundsRaised[uint8(FundRaiseType.POLY)].sub(totalWithdrawnPOLY);
+        require(availableToWithdraw > 0, "No funds to withdraw");
+        require(polyToken.transfer(msg.sender, availableToWithdraw), "Withdrawl failed");
+        totalWithdrawnPOLY = totalWithdrawnPOLY.add(availableToWithdraw);
+        emit FundsWithdrawn(availableToWithdraw);
+    }
+
+    /**
+    * @notice Refunds POLY funds in the event the soft cap has not been reached
+    */
+    function claimRefund(address _beneficiary) external {
+        require(!softCapReached(), "Soft cap was reached");
+        require(!isOpen(), "STO is still open");
+        require(investorInvestedPOLY[_beneficiary] > 0, "No refund to claim");
+        uint256 refund = investorInvestedPOLY[_beneficiary];
+        investorInvestedPOLY[_beneficiary] = 0;
+        require(polyToken.transfer(_beneficiary, refund), "Transfer failed");
+        totalRefundedPOLY = totalRefundedPOLY.add(refund);
+        emit FundsRefunded(_beneficiary, refund);
+    }
+
+    /**
+    * @notice Reclaims ERC20Basic compatible tokens
+    * @dev duplicated here to override so invested POLY cannot be withdrawn by this function
+    * @param _tokenContract The address of the token contract
+    */
+    function reclaimERC20(address _tokenContract) external {
+        _onlySecurityTokenOwner();
+        require(_tokenContract != address(0), "Invalid address");
+        IERC20 token = IERC20(_tokenContract);
+        uint256 balance = token.balanceOf(address(this));
+        // Calculate POLY balance that was sent directly to the contract and not invested
+        if (token == polyToken) {
+            balance = (token.balanceOf(address(this)).add(totalWithdrawnPOLY).add(totalRefundedPOLY)).sub(fundsRaised[uint8(FundRaiseType.POLY)]);
+        }
+        require(token.transfer(msg.sender, balance), "Transfer failed");
+    }
+
     /////////////
     // Getters //
     /////////////
@@ -497,6 +548,14 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
     */
     function capReached() public view returns (bool) {
         return totalTokensSold >= cap;
+    }
+
+    /**
+    * @notice Checks whether the cap has been reached.
+    * @return bool Whether the cap was reached
+    */
+    function softCapReached() public view returns (bool) {
+        return fundsRaisedUSD >= softCapUSD;
     }
 
     /**
@@ -537,6 +596,7 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
      * @return endTime - Unixtimestamp at which offering ends.
      * @return cap - Number of token base units this STO will be allowed to sell to investors.
      * @return rate - Token units a buyer gets(multiplied by 10^18) for USD value of invested POLY
+     * @return softCapUSD - minimum raise target in USD. investors can claim a refund if this is not met
      * @return minimumInvestment - minimum investment in USD
      * @return nonAccreditedLimit - default non accredited investor limit in USD
      * @return maxNonAccreditedInvestors - maximum number of non-accredited investors that can invest in the offering
@@ -546,13 +606,14 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
      * @return investorCount - Number of individual investors this STO have.
      * @return nonAccreditedCount - Number of non-accredited investor that have invested in the offering
      */
-    function getSTODetails() external view returns(uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
+    function getSTODetails() external view returns(uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256, uint256) {
         uint256 fundsRaisedPOLY = fundsRaised[uint8(FundRaiseType.POLY)];
         return (
             startTime,
             endTime,
             cap,
             rate,
+            softCapUSD,
             minimumInvestment,
             nonAccreditedLimit,
             maxNonAccreditedInvestors,
@@ -570,4 +631,5 @@ contract POLYPeggedSTO is POLYPeggedSTOStorage, STO, ReentrancyGuard {
     function getInitFunction() external pure returns (bytes4) {
         return this.configure.selector;
     }
+
 }
