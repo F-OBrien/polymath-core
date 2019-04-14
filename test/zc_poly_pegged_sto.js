@@ -234,10 +234,11 @@ contract("POLYPeggedSTO", async (accounts) => {
             await I_PolyToken.approve(I_STRProxied.address, REGFEE, { from: ISSUER });
 
             let tx = await I_STRProxied.generateSecurityToken(NAME, SYMBOL, TOKENDETAILS, true, ISSUER, 0, { from: ISSUER });
-            assert.equal(tx.logs[2].args._ticker, SYMBOL, "SecurityToken doesn't get deployed");
+            assert.equal(tx.logs[1].args._ticker, SYMBOL, "SecurityToken doesn't get deployed");
 
-            I_SecurityToken = await SecurityToken.at(tx.logs[2].args._securityTokenAddress);
+            I_SecurityToken = await SecurityToken.at(tx.logs[1].args._securityTokenAddress);
             stGetter = await STGetter.at(I_SecurityToken.address);
+            assert.equal(await stGetter.getTreasuryWallet.call(), ISSUER, "Incorrect wallet set");
             const log = (await I_SecurityToken.getPastEvents('ModuleAdded', {filter: {transactionHash: tx.transactionHash}}))[0];
 
             // Verify that GeneralTransferManager module get added successfully or not
@@ -278,7 +279,7 @@ contract("POLYPeggedSTO", async (accounts) => {
             ];
 
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
-            let tx = await I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), { from: ISSUER, gasPrice: GAS_PRICE });
+            let tx = await I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), false, { from: ISSUER, gasPrice: GAS_PRICE });
             console.log("          Gas addModule: ".grey + tx.receipt.gasUsed.toString().grey);
             assert.equal(tx.logs[2].args._types[0], STOKEY, "POLYPeggedSTO doesn't get deployed");
             assert.equal(web3.utils.hexToString(tx.logs[2].args._name), "POLYPeggedSTO", "POLYPeggedSTOFactory module was not added");
@@ -327,7 +328,7 @@ contract("POLYPeggedSTO", async (accounts) => {
 
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
             await catchRevert(
-                I_SecurityToken.addModule(P_POLYPeggedSTOFactory.address, bytesSTO, new BN(web3.utils.toWei("2000")), new BN(0), {
+                I_SecurityToken.addModule(P_POLYPeggedSTOFactory.address, bytesSTO, new BN(web3.utils.toWei("2000")), new BN(0), false, {
                     from: ISSUER,
                     gasPrice: GAS_PRICE
                 })
@@ -351,7 +352,7 @@ contract("POLYPeggedSTO", async (accounts) => {
 
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
             await I_PolyToken.getTokens(new BN(web3.utils.toWei("2000")), I_SecurityToken.address);
-            let tx = await I_SecurityToken.addModule(P_POLYPeggedSTOFactory.address, bytesSTO, new BN(web3.utils.toWei("2000")), new BN(0), {
+            let tx = await I_SecurityToken.addModule(P_POLYPeggedSTOFactory.address, bytesSTO, new BN(web3.utils.toWei("2000")), new BN(0), false, {
                 from: ISSUER,
                 gasPrice: GAS_PRICE
             });
@@ -384,7 +385,7 @@ contract("POLYPeggedSTO", async (accounts) => {
             ];
 
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
-            let tx = await I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), { from: ISSUER, gasPrice: GAS_PRICE });
+            let tx = await I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), false, { from: ISSUER, gasPrice: GAS_PRICE });
             console.log("          Gas addModule: ".grey + tx.receipt.gasUsed.toString().grey);
             assert.equal(tx.logs[2].args._types[0], STOKEY, "POLYPeggedSTO doesn't get deployed");
             assert.equal(web3.utils.hexToString(tx.logs[2].args._name), "POLYPeggedSTO", "POLYPeggedSTOFactory module was not added");
@@ -443,7 +444,7 @@ contract("POLYPeggedSTO", async (accounts) => {
             ];
 
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
-            let tx = await I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), { from: ISSUER, gasPrice: GAS_PRICE });
+            let tx = await I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), false, { from: ISSUER, gasPrice: GAS_PRICE });
             console.log("          Gas addModule: ".grey + tx.receipt.gasUsed.toString().grey);
             assert.equal(tx.logs[2].args._types[0], STOKEY, "POLYPeggedSTO doesn't get deployed");
             assert.equal(web3.utils.hexToString(tx.logs[2].args._name), "POLYPeggedSTO", "POLYPeggedSTOFactory module was not added");
@@ -476,7 +477,7 @@ contract("POLYPeggedSTO", async (accounts) => {
             ];
 
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
-            let tx = await I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), { from: ISSUER, gasPrice: GAS_PRICE });
+            let tx = await I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), false, { from: ISSUER, gasPrice: GAS_PRICE });
             console.log("          Gas addModule: ".grey + tx.receipt.gasUsed.toString().grey);
             assert.equal(tx.logs[2].args._types[0], STOKEY, "POLYPeggedSTO doesn't get deployed");
             assert.equal(web3.utils.hexToString(tx.logs[2].args._name), "POLYPeggedSTO", "POLYPeggedSTOFactory module was not added");
@@ -501,7 +502,7 @@ contract("POLYPeggedSTO", async (accounts) => {
             ];
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
 
-            await catchRevert(I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), { from: ISSUER }));
+            await catchRevert(I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), false, { from: ISSUER }));
         });
 
         it("Should fail because rate of token should be greater than 0", async () => {
@@ -521,7 +522,7 @@ contract("POLYPeggedSTO", async (accounts) => {
             ];
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
 
-            await catchRevert(I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), { from: ISSUER }));
+            await catchRevert(I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), false, { from: ISSUER }));
         });
 
         it("Should fail because end time before start time", async () => {
@@ -542,7 +543,7 @@ contract("POLYPeggedSTO", async (accounts) => {
             ];
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
 
-            await catchRevert(I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), { from: ISSUER }));
+            await catchRevert(I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), false, { from: ISSUER }));
         });
 
         it("Should fail because start time is in the past", async () => {
@@ -563,7 +564,7 @@ contract("POLYPeggedSTO", async (accounts) => {
             ];
             let bytesSTO = web3.eth.abi.encodeFunctionCall(functionSignature, config);
 
-            await catchRevert(I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), { from: ISSUER }));
+            await catchRevert(I_SecurityToken.addModule(I_POLYPeggedSTOFactory.address, bytesSTO, new BN(0), new BN(0), false, { from: ISSUER }));
         });
     });
 
@@ -3077,13 +3078,13 @@ contract("POLYPeggedSTO", async (accounts) => {
             assert.equal(web3.utils.hexToString(tags[2]), "POLY");
             assert.equal(web3.utils.hexToString(tags[3]), "STO");
             let lower = await I_POLYPeggedSTOFactory.lowerSTVersionBounds.call();
-            assert.equal(lower[0], 0, "Wrong lower bound");
-            assert.equal(lower[1], 0, "Wrong lower bound");
-            assert.equal(lower[2], 0, "Wrong lower bound");
+            assert.equal(lower[0], 3, "Wrong lower bound 0");
+            assert.equal(lower[1], 0, "Wrong lower bound 1");
+            assert.equal(lower[2], 0, "Wrong lower bound 2");
             let upper = await I_POLYPeggedSTOFactory.upperSTVersionBounds.call();
-            assert.equal(upper[0], 0, "Wrong upper bound");
-            assert.equal(upper[1], 0, "Wrong upper bound");
-            assert.equal(upper[2], 0, "Wrong upper bound");
+            assert.equal(upper[0], 3, "Wrong upper bound 0");
+            assert.equal(upper[1], 0, "Wrong upper bound 1");
+            assert.equal(upper[2], 0, "Wrong upper bound 2");
         });
 
         it("Should fail to change the setup cost for STO Factory - bad owner", async () => {
