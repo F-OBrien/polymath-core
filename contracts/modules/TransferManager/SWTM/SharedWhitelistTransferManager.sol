@@ -1,6 +1,6 @@
 pragma solidity ^0.5.0;
 
-import "../../TransferManager/TransferManager.sol";
+import "../TransferManager.sol";
 import "../../../libraries/Encoder.sol";
 import "../../../libraries/VersionUtils.sol";
 import "openzeppelin-solidity/contracts/math/SafeMath.sol";
