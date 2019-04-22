@@ -333,8 +333,31 @@ contract("SharedWhitelistTransferManager", async (accounts) => {
             });
             let moduleData = (await stGetter[1].getModulesByType(transferManagerKey))[1];
             I_SharedWhitelistTransferManager = await SharedWhitelistTransferManager.at(moduleData);
-
         });
+
+        it("Should verify access to first token whitelist and flags from the SWTM", async () => {
+            let dataGTM = await I_GeneralTransferManager[0].getKYCData.call([AFFILIATE1, AFFILIATE2]);
+
+            let fromTime1 = dataGTM[0][0];
+            let fromTime2 = dataGTM[0][1];
+            let toTime1 =  dataGTM[1][0];
+            let toTime2 = dataGTM[1][1];
+            let expiryTime1 = dataGTM[2][0];
+            let expiryTime2 = dataGTM[2][1];
+
+            assert.deepEqual(await I_SharedWhitelistTransferManager.getAllInvestors.call(), [AFFILIATE1, AFFILIATE2]);
+            console.log(await I_SharedWhitelistTransferManager.getAllKYCData.call());
+            let dataSWTM = await I_SharedWhitelistTransferManager.getKYCData.call([AFFILIATE1, AFFILIATE2]);
+            assert.equal(dataSWTM[0][0].toString(), fromTime1);
+            assert.equal(dataSWTM[0][1].toString(), fromTime2);
+            assert.equal(dataSWTM[1][0].toString(), toTime1);
+            assert.equal(dataSWTM[1][1].toString(), toTime2);
+            assert.equal(dataSWTM[2][0].toString(), expiryTime1);
+            assert.equal(dataSWTM[2][1].toString(), expiryTime2);
+            assert.equal(await I_SharedWhitelistTransferManager.getInvestorFlag(AFFILIATE1, 1), true);
+            assert.equal(await I_SharedWhitelistTransferManager.getInvestorFlag(AFFILIATE2, 1), true);
+        });
+
 
         it("Should mint the second token to the affiliates", async () => {
             console.log(`
@@ -567,6 +590,10 @@ contract("SharedWhitelistTransferManager", async (accounts) => {
             await increaseTime(5000);
 
             // Can transfer tokens
+            let resultSWTM = await I_SharedWhitelistTransferManager.verifyTransfer.call(INVESTOR1, INVESTOR2, new BN(web3.utils.toWei("1", "ether")), "0x0");
+            let resultGTM = await I_GeneralTransferManager[1].verifyTransfer.call(INVESTOR1, INVESTOR2, new BN(web3.utils.toWei("1", "ether")), "0x0");
+            assert.equal(resultSWTM[0].toString(), 2, "Result not Valid");
+            assert.equal(resultGTM[0].toString(), 1, "Result not NA");
             await I_SecurityToken[1].transfer(INVESTOR2, new BN(web3.utils.toWei("1", "ether")), { from: INVESTOR1 });
             assert.equal((await I_SecurityToken[1].balanceOf(INVESTOR1)).toString(), new BN(web3.utils.toWei("1", "ether")).toString());
             assert.equal((await I_SecurityToken[1].balanceOf(INVESTOR2)).toString(), new BN(web3.utils.toWei("1", "ether")).toString());
