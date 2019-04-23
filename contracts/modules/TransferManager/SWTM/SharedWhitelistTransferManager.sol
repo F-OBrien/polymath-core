@@ -307,6 +307,15 @@ contract SharedWhitelistTransferManager is SharedWhitelistTransferManagerStorage
     }
 
     /**
+     * @notice Returns the count of address that were added as (potential) investors
+     * @return Investor count
+     */
+    function getInvestorCount() external view returns(uint256) {
+        return whitelistDataStore.getAddressArrayLength(INVESTORSKEY);
+    }
+
+
+    /**
      * @dev Returns list of all investors
      */
     function getAllInvestors() public view returns(address[] memory investors) {
