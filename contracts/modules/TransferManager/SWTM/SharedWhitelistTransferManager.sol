@@ -112,6 +112,13 @@ contract SharedWhitelistTransferManager is SharedWhitelistTransferManagerStorage
         bytes calldata /*_data*/
     ) external returns(Result) {
         (Result success,) = _verifyTransfer(_from, _to);
+        // add _to address to token list of potential investors (required for checkpoints)
+        if (success == Result.VALID) {
+            IDataStore dataStore = getDataStore();
+            if (!_isExistingInvestor(_to, dataStore) && _to != address(0)) {
+               dataStore.insertAddress(INVESTORSKEY, _to);
+            }
+        }
         return success;
     }
 
@@ -284,6 +291,12 @@ contract SharedWhitelistTransferManager is SharedWhitelistTransferManagerStorage
             _canReceiveAfter = defaults.canReceiveAfter;
         }
         return (_canSendAfter, _canReceiveAfter);
+    }
+
+    function _isExistingInvestor(address _investor, IDataStore dataStore) internal view returns(bool) {
+        uint256 data = dataStore.getUint256(_getKey(WHITELIST, _investor));
+        //extracts `added` from packed `_whitelistData`
+        return uint8(data) == 0 ? false : true;
     }
 
     function _getKey(bytes32 _key1, address _key2) internal pure returns(bytes32) {

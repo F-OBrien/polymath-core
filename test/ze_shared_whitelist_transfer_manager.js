@@ -361,7 +361,6 @@ contract("SharedWhitelistTransferManager", async (accounts) => {
         });
 
         it("Should test getter functions", async () => {
-//            let snap_id = await takeSnapshot();
             await I_GeneralTransferManager[0].modifyInvestorFlagMulti([INVESTOR1, INVESTOR1, INVESTOR2], [0, 1, 1], [true, true, true], { from: ISSUER1 });
             let investors = await I_SharedWhitelistTransferManager.getInvestors.call(0, 3);
             assert.equal(investors[0], AFFILIATE1, "account mismatch");
@@ -382,9 +381,7 @@ contract("SharedWhitelistTransferManager", async (accounts) => {
             assert.equal(allInvestorFlags[1][3].toNumber(), 2, "Investor 4 flags not as expected")//0x000....00010
             let investorFlags = await I_SharedWhitelistTransferManager.getInvestorFlags.call(allInvestorFlags[0][0]);
             assert.equal(investorFlags, 2)//0x000....00010
-//            await revertToSnapshot(snap_id);
         });
-
 
         it("Should mint the second token to the affiliates", async () => {
             console.log(`
@@ -400,6 +397,20 @@ contract("SharedWhitelistTransferManager", async (accounts) => {
             assert.equal((await I_SecurityToken[1].balanceOf.call(AFFILIATE1)).div(new BN(10).pow(new BN(18))).toNumber(), 100);
             assert.equal((await I_SecurityToken[1].balanceOf.call(AFFILIATE2)).div(new BN(10).pow(new BN(18))).toNumber(), 100);
         });
+
+        it("Should increase investor count for second token", async () => {
+            await I_GeneralTransferManager[0].modifyInvestorFlagMulti([INVESTOR1, INVESTOR1, INVESTOR2], [0, 1, 1], [true, true, true], { from: ISSUER1 });
+            let investors = await stGetter[1].getInvestors.call();
+            assert.equal(investors[0], AFFILIATE1, "account mismatch");
+            assert.equal(investors[1], AFFILIATE2, "account mismatch");
+            let investorCount1 = await stGetter[0].getInvestorCount(); //count from first Token
+            let investorCount2 = await stGetter[1].getInvestorCount(); //count from second token
+            let investorCountSWTM = await I_SharedWhitelistTransferManager.getInvestorCount.call();
+            assert.equal(investorCount1.toNumber(), 4, "Token 1 count incorrect");
+            assert.equal(investorCount2.toNumber(), 2, "Token 2 count incorrect");
+            assert.equal(investorCountSWTM.toNumber(), 4, "Token 2 SWTM Investor count incorrect");
+        });
+
 
         it("Should successfully attach the STO factory to the second security token", async () => {
             let bytesSTO = encodeModuleCall(STOParameters, [
